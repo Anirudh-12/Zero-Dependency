@@ -58,6 +58,7 @@ PyXRay answers the questions that matter:
 | Which packages are most-depended-upon? | `hotspots` |
 | What does my source code actually import? | `imports` |
 | Do my declarations match my imports? | `audit` |
+| Which packages are good candidates for removal? | `prune` |
 | What's the longest dep chain? | `longest-chain` |
 | Detailed graph metrics? | `stats` |
 
@@ -70,9 +71,10 @@ Your project
      ↓
 pyproject.toml / requirements.txt
      ↓
-importlib.metadata (installed distributions)
+uv.lock / poetry.lock (Offline Mode - Default)
+ OR importlib.metadata (Active Env Mode - Fallback)
      ↓
-BFS graph traversal through Requires-Dist
+BFS graph traversal
      ↓
 Graph algorithms (DFS, BFS, DFS colouring)
      ↓
@@ -193,6 +195,14 @@ python -m pyxray audit
 python -m pyxray audit --json
 ```
 
+### `prune`
+Find packages that are good candidates for removal or reimplementation. It flags dependencies that are "thin" (few transitive deps), "narrow" (imported in very few files), and "shallow" (very few symbols used).
+
+```bash
+python -m pyxray prune
+python -m pyxray prune --thin 3 --narrow 3 --shallow 5
+```
+
 ---
 
 ## Global Flags
@@ -214,7 +224,9 @@ All commands support `--json` for scripting.
 **Be honest:** PyXRay has explicit limits you should know about.
 
 ### Environment scope
-PyXRay analyses the **currently active Python environment**. It does not simulate other environments, Python versions, or platforms. Run it inside the virtualenv you actually use.
+By default, PyXRay auto-detects `uv.lock` or `poetry.lock` files and reconstructs the dependency graph **entirely offline** without needing the packages installed. In this mode, it can analyze any environment.
+
+However, if no lockfile is found (or if `--no-lock` is passed), PyXRay falls back to analyzing the **currently active Python environment**. In this fallback mode, it does not simulate other environments or platforms, and you must run it inside the virtualenv you actually use.
 
 ### Import name ↔ distribution name
 Python import names are not always identical to distribution names:

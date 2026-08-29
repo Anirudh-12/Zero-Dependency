@@ -11,24 +11,24 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.models import Package, DependencyGraph, Project, Requirement, normalize_name
-from pyxray.graph import build_graph
 from pyxray.analysis import (
-    reachable_from,
-    reachable_reverse,
-    find_cycles,
     compute_depths,
     compute_in_degrees,
+    compute_stats,
+    find_cycles,
     find_longest_chain,
     find_paths,
-    compute_stats,
+    reachable_from,
+    reachable_reverse,
 )
+from pyxray.graph import build_graph
+from pyxray.models import DependencyGraph, Package, Project, Requirement, normalize_name
 from pyxray.requirements import parse_requirement
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_pkg(name: str, version: str = "1.0", deps: list[str] = None) -> Package:
     """Build a synthetic Package with string dependency names."""
@@ -64,8 +64,8 @@ def make_graph(*pkgs: Package, roots: list[str] = None) -> DependencyGraph:
 # Graph construction via build_graph
 # ---------------------------------------------------------------------------
 
-class TestBuildGraph(unittest.TestCase):
 
+class TestBuildGraph(unittest.TestCase):
     def test_simple_chain(self):
         """A → B → C"""
         pkgs = {
@@ -123,8 +123,8 @@ class TestBuildGraph(unittest.TestCase):
 # Reachability
 # ---------------------------------------------------------------------------
 
-class TestReachability(unittest.TestCase):
 
+class TestReachability(unittest.TestCase):
     def setUp(self):
         # A → B → C, D → C
         self.g = make_graph(
@@ -160,8 +160,8 @@ class TestReachability(unittest.TestCase):
 # Cycle detection
 # ---------------------------------------------------------------------------
 
-class TestCycles(unittest.TestCase):
 
+class TestCycles(unittest.TestCase):
     def test_no_cycles(self):
         g = make_graph(
             make_pkg("a", deps=["b"]),
@@ -203,8 +203,8 @@ class TestCycles(unittest.TestCase):
 # Depth calculation
 # ---------------------------------------------------------------------------
 
-class TestDepths(unittest.TestCase):
 
+class TestDepths(unittest.TestCase):
     def test_chain_depths(self):
         """A(root) → B → C should give depths {a:0, b:1, c:2}."""
         pkgs = {
@@ -228,8 +228,9 @@ class TestDepths(unittest.TestCase):
             "c": make_pkg("c"),
         }
         project = Project(
-            name="t", root="/t",
-            declared=[parse_requirement("a"), parse_requirement("b")]
+            name="t",
+            root="/t",
+            declared=[parse_requirement("a"), parse_requirement("b")],
         )
         g, _ = build_graph(project, pkgs)
         depths = compute_depths(g)
@@ -240,8 +241,8 @@ class TestDepths(unittest.TestCase):
 # Paths (why command)
 # ---------------------------------------------------------------------------
 
-class TestPaths(unittest.TestCase):
 
+class TestPaths(unittest.TestCase):
     def test_direct_path(self):
         g = make_graph(
             make_pkg("root", deps=["target"]),
@@ -275,8 +276,8 @@ class TestPaths(unittest.TestCase):
 # Longest chain
 # ---------------------------------------------------------------------------
 
-class TestLongestChain(unittest.TestCase):
 
+class TestLongestChain(unittest.TestCase):
     def test_simple_chain(self):
         g = make_graph(
             make_pkg("a", deps=["b"]),
@@ -307,8 +308,8 @@ class TestLongestChain(unittest.TestCase):
 # Stats
 # ---------------------------------------------------------------------------
 
-class TestStats(unittest.TestCase):
 
+class TestStats(unittest.TestCase):
     def test_stats_keys(self):
         pkgs = {
             "a": make_pkg("a", deps=["b"]),
@@ -320,9 +321,13 @@ class TestStats(unittest.TestCase):
 
         stats = compute_stats(g)
         expected_keys = {
-            "direct_dependencies", "transitive_dependencies",
-            "total_packages", "dependency_edges",
-            "maximum_depth", "average_depth", "cycle_count",
+            "direct_dependencies",
+            "transitive_dependencies",
+            "total_packages",
+            "dependency_edges",
+            "maximum_depth",
+            "average_depth",
+            "cycle_count",
         }
         for key in expected_keys:
             self.assertIn(key, stats)
