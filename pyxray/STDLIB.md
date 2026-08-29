@@ -126,6 +126,8 @@ This document is the evidence log for the Zero Dependency Craft score.
 13. **`platform.python_version_tuple()`** → Environment marker evaluation (python_version comparisons). Replaces `packaging.markers`.
 14. **`sys.platform`** → `sys_platform` marker evaluation (win32, linux, darwin). Replaces `packaging.markers`.
 15. **`json.dumps(..., indent=2, default=str)`** → All `--json` command output. No serialization library.
+16. **`urllib.request.urlopen()`** → Fetching metadata from PyPI JSON API for `--pypi` mode. Replaces `requests`, `httpx`.
+17. **`argparse.ArgumentParser`** → Command line parsing for CLI. Replaces `click`, `typer`.
 
 ---
 
@@ -135,7 +137,6 @@ These are places where the standard library genuinely has no answer, and we did 
 
 - **TOML writing:** Not needed for PyXRay. If it were, we would write it by hand (`key = "value"\n` templating) and document it here.
 - **PEP 440 version ordering:** Not implemented. We use string comparison for markers, which is sufficient for `==` and `!=` but not for `>=` version comparison of dynamic marker values. This is a documented limitation.
-- **HTTP client:** Not used. PyXRay is fully offline by design.
 - **Async runtime:** Not needed. Graph analysis is synchronous and fast.
 
 ---
