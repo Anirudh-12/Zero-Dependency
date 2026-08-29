@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from pyxray.models import Package, DependencyGraph, normalize_name
+from pyxray.models import DependencyGraph, Package, normalize_name
 from pyxray.requirements import parse_requirement
 
 if sys.version_info >= (3, 11):
@@ -60,6 +60,7 @@ def detect_lockfile(root: str) -> Optional[Path]:
 # ---------------------------------------------------------------------------
 # uv.lock parser
 # ---------------------------------------------------------------------------
+
 
 def _parse_uv_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
     """Parse a uv.lock file.
@@ -139,6 +140,7 @@ def _parse_uv_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
 # poetry.lock parser
 # ---------------------------------------------------------------------------
 
+
 def _parse_poetry_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
     """Parse a poetry.lock file.
 
@@ -190,7 +192,11 @@ def _parse_poetry_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
                 continue
             # constraint can be str, dict, or list
             if isinstance(constraint, str):
-                raw = f"{dep_name}{constraint}" if constraint not in ("*", "") else dep_name
+                raw = (
+                    f"{dep_name}{constraint}"
+                    if constraint not in ("*", "")
+                    else dep_name
+                )
             elif isinstance(constraint, dict):
                 # {version = ">=1.0", optional = true, markers = "..."}
                 ver = constraint.get("version", "")
@@ -228,6 +234,7 @@ def _parse_poetry_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
 # ---------------------------------------------------------------------------
 # Pinned requirements.txt (pip-compile output)
 # ---------------------------------------------------------------------------
+
 
 def _parse_pinned_requirements(path: Path) -> tuple[dict[str, Package], list[str]]:
     """Parse a fully-pinned requirements.txt (e.g. pip-compile output).
@@ -277,6 +284,7 @@ def _parse_pinned_requirements(path: Path) -> tuple[dict[str, Package], list[str
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def load_lockfile(path: Path) -> tuple[dict[str, Package], list[str]]:
     """Parse the lock file at *path* and return (packages, warnings).
