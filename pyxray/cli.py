@@ -11,7 +11,6 @@ import argparse
 import sys
 from typing import Optional
 
-
 # ---------------------------------------------------------------------------
 # Shared context (loaded once, shared across commands)
 # ---------------------------------------------------------------------------
@@ -797,10 +796,12 @@ def cmd_prune(ctx: Context, args: argparse.Namespace) -> int:
         out.print_warn(w)
 
     from pyxray.models import normalize_name
+
     project_norm = normalize_name(project.name)
 
     candidates = [
-        c for c in compute_prune_candidates(
+        c
+        for c in compute_prune_candidates(
             graph,
             usage_map,
             thin_threshold=args.thin,

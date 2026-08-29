@@ -1,7 +1,7 @@
 [project]
 name = "zero-dependency"
 version = "0.1.0"
-description = "Add your description here"
+description = "Zero-dependency Python dependency investigation tool"
 readme = "README.md"
 authors = [
     { name = "K.Akshay Reddy", email = "akshaysunny2006@gmail.com" }
@@ -10,8 +10,19 @@ requires-python = ">=3.13"
 dependencies = []
 
 [project.scripts]
-zero-dependency = "zero_dependency:main"
+pyxray = "pyxray.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Anirudh-12/Zero-Dependency"
 
 [build-system]
-requires = ["uv_build>=0.12.2,<0.13.0"]
-build-backend = "uv_build"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pyxray*"]
+
+[tool.zero-dep]
+track = "A"
+pitch = "A zero-dependency CLI that reconstructs and investigates your Python dependency graph from installed metadata and AST — no packages required."

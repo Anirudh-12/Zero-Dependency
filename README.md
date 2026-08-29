@@ -92,8 +92,8 @@ No network. No ML. No guessing.
 **No installation required.** Clone and run:
 
 ```bash
-git clone https://github.com/akshayjith4/pyxray
-cd pyxray
+git clone https://github.com/Anirudh-12/Zero-Dependency
+cd Zero-Dependency/pyxray
 python -m pyxray --help
 ```
 
