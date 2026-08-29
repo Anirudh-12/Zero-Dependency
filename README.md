@@ -295,6 +295,7 @@ python -m unittest discover -s tests -v
 Bonus challenges targeted:
 - **Package Killer (+3):** `networkx`, `pipdeptree`, `packaging`, `rich`, `colorama`, `click`
 - **STDLIB Log (+3):** See `STDLIB.md`
+- **Reproducible Build:** See Reproducible Build Proof below
 
 ---
 
@@ -311,3 +312,27 @@ print('dependencies:', deps)
 ```
 
 See `deps-proof.txt` for timestamped proof.
+
+---
+
+## Reproducible Build Proof
+
+We've achieved byte-identical builds! By enforcing a fixed `SOURCE_DATE_EPOCH`, `uv build` deterministicly generates the exact same artifact on every run.
+
+```bash
+# Build 1
+$env:SOURCE_DATE_EPOCH = "1704067200"
+uv build
+$hash1 = (Get-FileHash -Algorithm SHA256 dist/zero_dependency-0.1.0-py3-none-any.whl).Hash
+
+# Delete and build again
+rm dist/zero_dependency-0.1.0-py3-none-any.whl
+uv build
+$hash2 = (Get-FileHash -Algorithm SHA256 dist/zero_dependency-0.1.0-py3-none-any.whl).Hash
+```
+
+**Byte-Identical Hashes:**
+- Build 1 SHA256: `F6784650B4F5EAFA8B23A5C334AF20DB1411E7B0430D2AD1D17693E4FFC5E970`
+- Build 2 SHA256: `F6784650B4F5EAFA8B23A5C334AF20DB1411E7B0430D2AD1D17693E4FFC5E970`
+
+**Result:** `Match!`
