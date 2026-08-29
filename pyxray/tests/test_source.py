@@ -6,19 +6,19 @@ Uses only: unittest, tempfile, textwrap (stdlib)
 
 import os
 import sys
-import unittest
 import tempfile
 import textwrap
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.source import (
-    extract_imports_from_file,
-    classify_imports,
-    build_import_map,
-)
 from pyxray.models import Package, SourceImport, normalize_name
+from pyxray.source import (
+    build_import_map,
+    classify_imports,
+    extract_imports_from_file,
+)
 
 
 def write_temp_py(content: str) -> Path:
@@ -31,7 +31,6 @@ def write_temp_py(content: str) -> Path:
 
 
 class TestExtractImports(unittest.TestCase):
-
     def tearDown(self):
         # Cleanup temp files
         for attr in ("_tmp",):
@@ -61,9 +60,7 @@ class TestExtractImports(unittest.TestCase):
         self.assertEqual(imports[0].module, "os")  # top-level only
 
     def test_multiple_imports(self):
-        self._tmp = write_temp_py(
-            "import sys\nimport os\nfrom pathlib import Path\n"
-        )
+        self._tmp = write_temp_py("import sys\nimport os\nfrom pathlib import Path\n")
         imports, _ = extract_imports_from_file(self._tmp)
         modules = {i.module for i in imports}
         self.assertIn("sys", modules)
@@ -79,9 +76,7 @@ class TestExtractImports(unittest.TestCase):
 
     def test_nested_import(self):
         """Imports inside functions should still be extracted."""
-        self._tmp = write_temp_py(
-            "def foo():\n    import json\n"
-        )
+        self._tmp = write_temp_py("def foo():\n    import json\n")
         imports, _ = extract_imports_from_file(self._tmp)
         self.assertEqual(imports[0].module, "json")
 
@@ -92,15 +87,12 @@ class TestExtractImports(unittest.TestCase):
         self.assertEqual(imports, [])
 
     def test_line_number(self):
-        self._tmp = write_temp_py(
-            "# comment\nimport requests\n"
-        )
+        self._tmp = write_temp_py("# comment\nimport requests\n")
         imports, _ = extract_imports_from_file(self._tmp)
         self.assertEqual(imports[0].line, 2)
 
 
 class TestClassifyImports(unittest.TestCase):
-
     def _make_import(self, module: str) -> SourceImport:
         return SourceImport(module=module, file="test.py", line=1, col=0)
 
@@ -127,7 +119,6 @@ class TestClassifyImports(unittest.TestCase):
 
 
 class TestBuildImportMap(unittest.TestCase):
-
     def test_basic_mapping(self):
         pkg = Package(
             name="requests",

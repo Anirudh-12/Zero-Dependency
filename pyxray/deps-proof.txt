@@ -1,0 +1,15 @@
+PyXRay — Dependency Proof
+Generated: 2026-08-29 19:42:35 UTC
+Python: Python 3.12.9
+
+=== pyproject.toml [project].dependencies ===
+dependencies = [] PASS: zero runtime dependencies confirmed
+
+=== pip show pyxray (no third-party packages) ===
+No packages installed via pip for runtime.
+All functionality uses Python standard library only.
+
+=== Standard library modules used ===
+argparse, ast, collections, dataclasses, fnmatch, hashlib,
+importlib, importlib.metadata, json, os, pathlib, platform,
+re, sys, textwrap, tomllib, typing, unittest

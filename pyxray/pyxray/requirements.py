@@ -203,7 +203,7 @@ def _compare(lhs: str, op: str, rhs: str) -> bool:
     return True  # unknown → include
 
 
-def evaluate_marker(marker: Optional[str]) -> bool:
+def evaluate_marker(marker: Optional[str], extra: str = "") -> bool:
     """Return True if *marker* passes for the current environment.
 
     This is a best-effort partial evaluator. Unknown variables → include.
@@ -220,29 +220,32 @@ def evaluate_marker(marker: Optional[str]) -> bool:
     # Split on ' and ' first (higher precedence in PEP 508).
     if " and " in marker.lower():
         parts = re.split(r"\s+and\s+", marker, flags=re.IGNORECASE)
-        return all(evaluate_marker(p) for p in parts)
+        return all(evaluate_marker(p, extra) for p in parts)
     if " or " in marker.lower():
         parts = re.split(r"\s+or\s+", marker, flags=re.IGNORECASE)
-        return any(evaluate_marker(p) for p in parts)
+        return any(evaluate_marker(p, extra) for p in parts)
 
     # Strip surrounding parens
     stripped = marker.strip()
     if stripped.startswith("(") and stripped.endswith(")"):
-        return evaluate_marker(stripped[1:-1])
+        return evaluate_marker(stripped[1:-1], extra)
 
     m = _MARKER_EXPR_RE.match(stripped)
     if not m:
         return True  # unrecognised → include
 
+    env_map = dict(_MARKER_VAR_MAP)
+    env_map["extra"] = extra
+
     if m.group(1):  # var op "value"
         var_name, op, value = m.group(1), m.group(2), m.group(3)
-        env_val = _MARKER_VAR_MAP.get(var_name)
+        env_val = env_map.get(var_name)
         if env_val is None:
             return True
         return _compare(env_val, op, value)
     else:  # "value" op var
         value, op, var_name = m.group(4), m.group(5), m.group(6)
-        env_val = _MARKER_VAR_MAP.get(var_name)
+        env_val = env_map.get(var_name)
         if env_val is None:
             return True
         return _compare(value, op, env_val)

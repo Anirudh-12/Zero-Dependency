@@ -396,3 +396,186 @@ def compute_stats(graph: DependencyGraph) -> dict[str, object]:
         "most_depended_upon_count": hotspot_count,
         "missing_packages": len(graph.missing),
     }
+
+
+# ---------------------------------------------------------------------------
+# Prune / reimplement candidate analysis
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass
+from dataclasses import field as _field
+
+
+@dataclass
+class PruneCandidate:
+    """A declared dependency flagged for potential removal or reimplementation.
+
+    Every field is traceable to graph edges or AST nodes — no guessing.
+
+    Signals
+    -------
+    transitive_count:   Number of packages in this dep's forward closure.
+                        0 = leaf (no deps of its own).
+    file_count:         Number of source files that import it (AST).
+    symbol_count:       Number of distinct symbols imported from it (AST).
+                        '*' = bare ``import pkg`` (full module used).
+    is_transitively_covered:
+                        True if this dep is already reachable as a
+                        transitive dep of another declared dep —
+                        so removing the direct declaration is safe today.
+
+    Labels
+    ------
+    REIMPLEMENT:  Thin + narrow + shallow → strong candidate to rewrite
+                  in stdlib. The package does little and you use little of it.
+    REMOVE:       No static usage detected AND transitively covered.
+                  Safe to remove from declared deps right now.
+    UNDECLARE:    No static usage AND NOT transitively covered.
+                  Not imported, but removing it changes the install set.
+    COVERED:      Transitively covered; already arrives via another dep.
+                  Removing the direct declaration is safe but subtle.
+    KEEP:         Signals do not support removal. Leave it alone.
+    """
+
+    norm_name: str
+    version: str
+    label: str  # REIMPLEMENT / REMOVE / UNDECLARE / COVERED / KEEP
+    confidence: str  # HIGH / MEDIUM / LOW
+    transitive_count: int = 0
+    file_count: int = 0
+    symbol_count: int = 0
+    symbols_used: list = _field(default_factory=list)
+    files_using: list = _field(default_factory=list)
+    is_transitively_covered: bool = False
+    has_static_import: bool = False
+    uses_full_module: bool = False
+    reason: str = ""
+
+
+def compute_prune_candidates(
+    graph: "DependencyGraph",
+    usage_map: dict,  # norm_name → SourceUsage
+    thin_threshold: int = 3,  # transitive deps ≤ this → "thin"
+    narrow_threshold: int = 3,  # files ≤ this → "narrow"
+    shallow_threshold: int = 5,  # symbols ≤ this → "shallow"
+) -> list[PruneCandidate]:
+    """Score every direct declared dependency across three signals.
+
+    Parameters
+    ----------
+    graph:             The dependency graph.
+    usage_map:         Per-package source usage from ``scan_with_usage``.
+    thin_threshold:    Max transitive deps to be considered "thin".
+    narrow_threshold:  Max source files to be considered "narrow".
+    shallow_threshold: Max imported symbols to be considered "shallow".
+
+    Returns a list of PruneCandidate sorted by confidence then label.
+    """
+    candidates: list[PruneCandidate] = []
+
+    for norm_name in sorted(graph.roots):
+        pkg = graph.packages.get(norm_name)
+        version = pkg.version if pkg else "?"
+
+        # ── Signal 1: Thin graph ─────────────────────────────────────────
+        # How many packages does this dep bring with it?
+        subtree = reachable_from(graph, norm_name)
+        subtree.discard(norm_name)  # exclude self
+        transitive_count = len(subtree)
+        is_thin = transitive_count <= thin_threshold
+
+        # ── Signal 2: Narrow usage ───────────────────────────────────────
+        usage = usage_map.get(norm_name)
+        has_static_import = usage is not None and usage.file_count > 0
+        file_count = usage.file_count if usage else 0
+        is_narrow = file_count <= narrow_threshold
+
+        # ── Signal 3: Shallow API usage ──────────────────────────────────
+        symbol_count = usage.symbol_count if usage else 0
+        uses_full_module = usage.uses_full_module if usage else False
+        # If bare `import pkg` was used, treat as full API → not shallow
+        is_shallow = (not uses_full_module) and (symbol_count <= shallow_threshold)
+        symbols_used = sorted(usage.symbols - {"*", "?"}) if usage else []
+        files_using = sorted(usage.files) if usage else []
+
+        # ── Signal 4: Transitively covered ───────────────────────────────
+        # Is this package reachable as a transitive dep of another root?
+        other_roots = graph.roots - {norm_name}
+        is_covered = any(
+            norm_name in reachable_from(graph, other) - {other} for other in other_roots
+        )
+
+        # ── Classify ─────────────────────────────────────────────────────
+        signals_for_reimplement = sum([is_thin, is_narrow, is_shallow])
+
+        if is_thin and is_narrow and is_shallow and not uses_full_module:
+            label = "REIMPLEMENT"
+            confidence = "HIGH" if transitive_count == 0 else "MEDIUM"
+            reason = (
+                f"Zero deps of its own"
+                if transitive_count == 0
+                else f"Only {transitive_count} transitive dep(s)"
+            )
+            reason += (
+                f"; used in {file_count} file(s)"
+                f"; only {symbol_count} symbol(s) imported"
+            )
+            if symbols_used:
+                reason += f": {', '.join(symbols_used[:5])}"
+
+        elif not has_static_import and is_covered:
+            label = "REMOVE"
+            confidence = "HIGH"
+            reason = (
+                "No static import detected AND already arrives transitively "
+                "via another declared dep — safe to remove from declared deps"
+            )
+
+        elif not has_static_import and not is_covered:
+            label = "UNDECLARE"
+            confidence = "MEDIUM"
+            reason = (
+                "No static import detected. "
+                "Removing from declared deps would change the install set — "
+                "verify it is not used via entry points or dynamic imports"
+            )
+
+        elif is_covered and not is_thin:
+            label = "COVERED"
+            confidence = "MEDIUM"
+            reason = (
+                "Already arrives as a transitive dep of another declared dep. "
+                "Removing the direct declaration is safe but changes pinning semantics"
+            )
+
+        else:
+            label = "KEEP"
+            confidence = "LOW"
+            reason = (
+                f"{transitive_count} transitive dep(s), "
+                f"used in {file_count} file(s), "
+                f"{symbol_count} symbol(s) — not a strong removal candidate"
+            )
+
+        candidates.append(
+            PruneCandidate(
+                norm_name=norm_name,
+                version=version,
+                label=label,
+                confidence=confidence,
+                transitive_count=transitive_count,
+                file_count=file_count,
+                symbol_count=symbol_count,
+                symbols_used=symbols_used,
+                files_using=files_using,
+                is_transitively_covered=is_covered,
+                has_static_import=has_static_import,
+                uses_full_module=uses_full_module,
+                reason=reason,
+            )
+        )
+
+    # Sort: actionable first (REMOVE > REIMPLEMENT > UNDECLARE > COVERED > KEEP)
+    _order = {"REMOVE": 0, "REIMPLEMENT": 1, "UNDECLARE": 2, "COVERED": 3, "KEEP": 4}
+    candidates.sort(key=lambda c: (_order.get(c.label, 9), c.norm_name))
+    return candidates

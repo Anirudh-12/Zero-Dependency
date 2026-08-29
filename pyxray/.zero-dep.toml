@@ -1,0 +1,2 @@
+track = "A"
+pitch = "A zero-dependency Python CLI that reconstructs and investigates your dependency graph from installed metadata and AST — no packages required."
