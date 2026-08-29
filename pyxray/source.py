@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import os
 import sys
+import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -383,6 +384,17 @@ def scan_source_roots(
     warnings: list[str] = []
     root_path = Path(project_root)
     seen_files: set[str] = set()
+    
+    cache_file = root_path / ".pyxray_cache" / "ast_cache.pkl"
+    ast_cache = {}
+    if cache_file.exists():
+        try:
+            with open(cache_file, "rb") as f:
+                ast_cache = pickle.load(f)
+        except Exception:
+            pass
+            
+    cache_updated = False
 
     for src_root in source_roots:
         src = Path(src_root)
@@ -407,16 +419,34 @@ def scan_source_roots(
                 except ValueError:
                     rel = str(fpath)
 
-                file_imports, err = extract_imports_from_file(fpath)
-                if err:
-                    warnings.append(err)
-                    continue
-
-                # Rewrite the .file field to a relative path
-                for imp in file_imports:
-                    imp.file = rel
+                try:
+                    mtime = fpath.stat().st_mtime
+                except OSError:
+                    mtime = 0
+                    
+                if abs_str in ast_cache and ast_cache[abs_str].get("mtime") == mtime:
+                    file_imports = ast_cache[abs_str].get("imports", [])
+                else:
+                    file_imports, err = extract_imports_from_file(fpath)
+                    if err:
+                        warnings.append(err)
+                        continue
+                        
+                    for imp in file_imports:
+                        imp.file = rel
+                        
+                    ast_cache[abs_str] = {"mtime": mtime, "imports": file_imports}
+                    cache_updated = True
 
                 all_imports.extend(file_imports)
+                
+    if cache_updated:
+        try:
+            cache_file.parent.mkdir(exist_ok=True)
+            with open(cache_file, "wb") as f:
+                pickle.dump(ast_cache, f)
+        except Exception:
+            pass
 
     return all_imports, warnings
 
@@ -617,6 +647,18 @@ def scan_with_usage(
     all_symbols: list[set[str]] = []
     warnings: list[str] = []
     seen_files: set[str] = set()
+    
+    root_path = Path(project_root)
+    cache_file = root_path / ".pyxray_cache" / "ast_usage_cache.pkl"
+    ast_cache = {}
+    if cache_file.exists():
+        try:
+            with open(cache_file, "rb") as f:
+                ast_cache = pickle.load(f)
+        except Exception:
+            pass
+            
+    cache_updated = False
 
     for src_root in source_roots:
         src = Path(src_root)
@@ -640,17 +682,37 @@ def scan_with_usage(
                     rel = str(fpath.relative_to(Path(project_root)))
                 except ValueError:
                     rel = str(fpath)
+                    
+                try:
+                    mtime = fpath.stat().st_mtime
+                except OSError:
+                    mtime = 0
+                    
+                if abs_str in ast_cache and ast_cache[abs_str].get("mtime") == mtime:
+                    file_imports = ast_cache[abs_str].get("imports", [])
+                    file_symbols = ast_cache[abs_str].get("symbols", [])
+                else:
+                    file_imports, file_symbols, err = extract_imports_with_symbols(fpath)
+                    if err:
+                        warnings.append(err)
+                        continue
 
-                file_imports, file_symbols, err = extract_imports_with_symbols(fpath)
-                if err:
-                    warnings.append(err)
-                    continue
-
-                for imp in file_imports:
-                    imp.file = rel
+                    for imp in file_imports:
+                        imp.file = rel
+                        
+                    ast_cache[abs_str] = {"mtime": mtime, "imports": file_imports, "symbols": file_symbols}
+                    cache_updated = True
 
                 all_imports.extend(file_imports)
                 all_symbols.extend(file_symbols)
+                
+    if cache_updated:
+        try:
+            cache_file.parent.mkdir(exist_ok=True)
+            with open(cache_file, "wb") as f:
+                pickle.dump(ast_cache, f)
+        except Exception:
+            pass
 
     usage_map = build_usage_map(all_imports, import_map, all_symbols)
     return all_imports, usage_map, warnings

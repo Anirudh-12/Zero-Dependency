@@ -95,14 +95,10 @@ def _dist_to_package(dist: importlib.metadata.Distribution) -> Package:
     meta = dist.metadata
     name: str = meta["Name"] or ""
     version: str = meta["Version"] or "unknown"
-    normalized = normalize_name(name)
+    normalized = sys.intern(normalize_name(name))
 
     # Requires-Dist can appear multiple times in metadata
     raw_requires: list[str] = meta.get_all("Requires-Dist") or []  # type: ignore[attr-defined]
-
-    parsed_requires = [parse_requirement(r) for r in raw_requires]
-
-    top_level = _get_top_level_names(dist)
 
     # Attempt to locate the .dist-info path
     try:
@@ -111,11 +107,10 @@ def _dist_to_package(dist: importlib.metadata.Distribution) -> Package:
         meta_path = None
 
     return Package(
-        name=name,
+        name=sys.intern(name) if name else name,
         normalized_name=normalized,
-        version=version,
-        requires=parsed_requires,
-        top_level_names=top_level,
+        version=sys.intern(version) if version else version,
+        raw_requires=raw_requires,
         metadata_path=meta_path,
     )
 

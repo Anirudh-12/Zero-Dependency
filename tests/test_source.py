@@ -123,9 +123,9 @@ class TestBuildImportMap(unittest.TestCase):
         pkg = Package(
             name="requests",
             normalized_name="requests",
-            version="2.31.0",
-            top_level_names=["requests"],
+            version="2.0",
         )
+        pkg.top_level_names = ["requests"]
         imp_map = build_import_map({"requests": pkg})
         self.assertIn("requests", imp_map)
         self.assertEqual(imp_map["requests"], "requests")
@@ -136,8 +136,8 @@ class TestBuildImportMap(unittest.TestCase):
             name="my-package",
             normalized_name="my-package",
             version="1.0",
-            top_level_names=[],
         )
+        pkg.top_level_names = []
         imp_map = build_import_map({"my-package": pkg})
         self.assertIn("my_package", imp_map)
 
@@ -147,8 +147,8 @@ class TestBuildImportMap(unittest.TestCase):
             name="beautifulsoup4",
             normalized_name="beautifulsoup4",
             version="4.12.0",
-            top_level_names=["bs4"],
         )
+        pkg.top_level_names = ["bs4"]
         imp_map = build_import_map({"beautifulsoup4": pkg})
         self.assertIn("bs4", imp_map)
         self.assertEqual(imp_map["bs4"], "beautifulsoup4")

@@ -31,14 +31,14 @@ from pyxray.requirements import parse_requirement
 
 
 def make_pkg(name: str, version: str = "1.0", deps: list[str] = None) -> Package:
-    """Build a synthetic Package with string dependency names."""
-    reqs = [parse_requirement(d) for d in (deps or [])]
-    return Package(
+    """Helper to create a Package with mocked dependencies."""
+    p = Package(
         name=name,
         normalized_name=normalize_name(name),
         version=version,
-        requires=reqs,
+        raw_requires=deps or [],
     )
+    return p
 
 
 def make_graph(*pkgs: Package, roots: list[str] = None) -> DependencyGraph:

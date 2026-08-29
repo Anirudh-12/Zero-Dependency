@@ -20,13 +20,14 @@ The lock file already contains the fully-resolved graph.
 
 from __future__ import annotations
 
+import pickle
 import re
 import sys
 from pathlib import Path
 from typing import Optional
 
 from pyxray.models import DependencyGraph, Package, normalize_name
-from pyxray.requirements import parse_requirement
+from pyxray.requirements import parse_requirement, fast_extract_normalized_name
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -111,8 +112,7 @@ def _parse_uv_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
         for dep in entry.get("dependencies", []):
             dep_name = dep.get("name", "")
             if dep_name:
-                req = parse_requirement(dep_name)
-                reqs.append(req)
+                reqs.append(dep_name)
 
         # Also parse optional/dev deps if present
         # uv.lock groups optional deps under 'optional-dependencies'
@@ -120,13 +120,13 @@ def _parse_uv_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
             for dep in group_deps:
                 dep_name = dep.get("name", "")
                 if dep_name:
-                    reqs.append(parse_requirement(dep_name))
+                    reqs.append(dep_name)
 
         pkg = Package(
-            name=name,
-            normalized_name=norm,
-            version=version,
-            requires=reqs,
+            name=sys.intern(name) if name else name,
+            normalized_name=sys.intern(norm) if norm else norm,
+            version=sys.intern(version) if version else version,
+            raw_requires=reqs,
             metadata_path=str(path),
         )
 
@@ -213,15 +213,14 @@ def _parse_poetry_lock(path: Path) -> tuple[dict[str, Package], list[str]]:
             else:
                 raw = dep_name
 
-            req = parse_requirement(raw)
-            if req.name:
-                reqs.append(req)
+            if raw:
+                reqs.append(raw)
 
         pkg = Package(
-            name=name,
-            normalized_name=norm,
-            version=version,
-            requires=reqs,
+            name=sys.intern(name) if name else name,
+            normalized_name=sys.intern(norm) if norm else norm,
+            version=sys.intern(version) if version else version,
+            raw_requires=reqs,
             metadata_path=str(path),
         )
 
@@ -266,13 +265,13 @@ def _parse_pinned_requirements(path: Path) -> tuple[dict[str, Package], list[str
             continue
         req = parse_requirement(line)
         if req.name and not req.parse_error:
-            norm = req.normalized_name
+            norm = sys.intern(req.normalized_name)
             ver = req.specifiers[0].version if req.specifiers else "?"
             pkg = Package(
-                name=req.name,
+                name=sys.intern(req.name),
                 normalized_name=norm,
-                version=ver,
-                requires=[],
+                version=sys.intern(ver),
+                raw_requires=[],
                 metadata_path=str(path),
             )
             if norm not in packages:
@@ -290,16 +289,37 @@ def load_lockfile(path: Path) -> tuple[dict[str, Package], list[str]]:
     """Parse the lock file at *path* and return (packages, warnings).
 
     Dispatches to the correct parser based on filename.
+    Uses .pyxray_cache/ to bypass slow parsing if unchanged.
     """
     name = path.name.lower()
+    cache_dir = path.parent / ".pyxray_cache"
+    cache_file = cache_dir / f"{name}.pkl"
+
+    try:
+        lock_mtime = path.stat().st_mtime
+        if cache_file.exists() and cache_file.stat().st_mtime >= lock_mtime:
+            with open(cache_file, "rb") as f:
+                return pickle.load(f)
+    except OSError:
+        pass
+
     if name == "uv.lock":
-        return _parse_uv_lock(path)
+        res = _parse_uv_lock(path)
     elif name == "poetry.lock":
-        return _parse_poetry_lock(path)
+        res = _parse_poetry_lock(path)
     elif name.endswith(".txt"):
-        return _parse_pinned_requirements(path)
+        res = _parse_pinned_requirements(path)
     else:
-        return {}, [f"Unrecognised lock file format: {path.name}"]
+        res = {}, [f"Unrecognised lock file format: {path.name}"]
+
+    try:
+        cache_dir.mkdir(exist_ok=True)
+        with open(cache_file, "wb") as f:
+            pickle.dump(res, f)
+    except OSError:
+        pass
+
+    return res
 
 
 def build_graph_from_lockfile(
@@ -326,12 +346,12 @@ def build_graph_from_lockfile(
     for pkg in packages.values():
         graph.add_package(pkg)
 
-    # Add edges from Requires-Dist
+    # Add edges from Requires-Dist using extremely fast regex extraction
     for norm_name, pkg in packages.items():
-        for req in pkg.requires:
-            if not req.name:
+        for raw in pkg.raw_requires:
+            dep_norm = fast_extract_normalized_name(raw)
+            if not dep_norm:
                 continue
-            dep_norm = req.normalized_name
             if dep_norm in packages:
                 graph.add_edge(norm_name, dep_norm)
             # If dep not in lockfile, it's fine — cross-ref missing is optional

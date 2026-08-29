@@ -90,17 +90,46 @@ class Package:
     name:             Display name from distribution metadata.
     normalized_name:  PEP-503 canonical name.
     version:          Installed version string.
-    requires:         List of parsed Requirement objects (Requires-Dist).
-    top_level_names:  Import names exposed by this distribution (from
-                      top_level.txt or RECORD, best-effort).
+    raw_requires:     List of raw dependency strings.
     metadata_path:    Path to the .dist-info directory (for tracing).
     """
     name: str
     normalized_name: str
     version: str
-    requires: list[Requirement] = field(default_factory=list)
-    top_level_names: list[str] = field(default_factory=list)
+    raw_requires: list[str] = field(default_factory=list)
     metadata_path: Optional[str] = None
+    
+    _requires_cache: Optional[list[Requirement]] = field(default=None, init=False, repr=False)
+    _top_level_cache: Optional[list[str]] = field(default=None, init=False, repr=False)
+
+    @property
+    def requires(self) -> list[Requirement]:
+        if self._requires_cache is None:
+            from pyxray.requirements import parse_requirement
+            self._requires_cache = [parse_requirement(r) for r in self.raw_requires]
+        return self._requires_cache
+
+    @requires.setter
+    def requires(self, value: list[Requirement]) -> None:
+        self._requires_cache = value
+
+    @property
+    def top_level_names(self) -> list[str]:
+        if self._top_level_cache is None:
+            import importlib.metadata
+            from pyxray.metadata import _get_top_level_names
+            try:
+                # We use the name to find the distribution. If it's a lockfile pkg
+                # that is NOT installed, this throws PackageNotFoundError and returns [].
+                dist = importlib.metadata.distribution(self.name)
+                self._top_level_cache = _get_top_level_names(dist)
+            except importlib.metadata.PackageNotFoundError:
+                self._top_level_cache = []
+        return self._top_level_cache
+
+    @top_level_names.setter
+    def top_level_names(self, value: list[str]) -> None:
+        self._top_level_cache = value
 
     def __hash__(self) -> int:
         return hash(self.normalized_name)

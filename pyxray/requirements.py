@@ -52,6 +52,32 @@ _VER_RE = re.compile(r"([A-Za-z0-9._!+*]+)")
 _URL_RE = re.compile(r"@\s*\S+")
 
 
+def fast_extract_normalized_name(raw: str) -> Optional[str]:
+    """Extremely fast extraction of the normalized package name from a PEP 508 string.
+    
+    Used during graph construction to avoid fully parsing Requirements.
+    Interns the resulting string for O(1) dict lookups.
+    """
+    if " #" in raw:
+        raw = raw[: raw.index(" #")]
+    raw = raw.strip()
+    if not raw or raw.startswith("#"):
+        return None
+        
+    m = _NAME_RE.match(raw)
+    if m:
+        return sys.intern(normalize_name(m.group(1)))
+        
+    if _URL_RE.search(raw):
+        s = raw.split("@")[0].strip()
+        m2 = _NAME_RE.match(s)
+        if m2:
+            return sys.intern(normalize_name(m2.group(1)))
+            
+    return None
+
+
+
 def parse_requirement(raw: str) -> Requirement:
     """Parse a PEP 508 dependency string into a ``Requirement``.
 
