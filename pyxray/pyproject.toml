@@ -13,7 +13,7 @@ dependencies = []
 pyxray = "pyxray.cli:main"
 
 [project.urls]
-Repository = "https://github.com/akshayjith4/pyxray"
+Repository = "https://github.com/Anirudh-12/Zero-Dependency"
 
 [build-system]
 requires = ["setuptools"]
