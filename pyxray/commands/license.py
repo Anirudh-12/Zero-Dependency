@@ -7,24 +7,74 @@ if TYPE_CHECKING:
     from pyxray.cli import Context
 
 
+_LICENSE_ALIASES: dict[str, str] = {
+    "mit license": "MIT",
+    "the mit license": "MIT",
+    "mit": "MIT",
+    "apache software license": "Apache-2.0",
+    "apache 2.0": "Apache-2.0",
+    "apache-2.0": "Apache-2.0",
+    "apache license 2.0": "Apache-2.0",
+    "apache license, version 2.0": "Apache-2.0",
+    "bsd license": "BSD",
+    "bsd 3-clause license": "BSD-3-Clause",
+    "bsd-3-clause": "BSD-3-Clause",
+    "new bsd license": "BSD-3-Clause",
+    "bsd 2-clause license": "BSD-2-Clause",
+    "bsd-2-clause": "BSD-2-Clause",
+    "simplified bsd": "BSD-2-Clause",
+    "gpl": "GPL",
+    "gplv2": "GPL-2.0",
+    "gplv3": "GPL-3.0",
+    "gnu general public license v2 (gplv2)": "GPL-2.0",
+    "gnu general public license v3 (gplv3)": "GPL-3.0",
+}
+
 
 def _normalise_license(raw: str) -> str:
     """Normalise a freeform license string to a canonical SPDX-ish identifier."""
     key = raw.strip().lower()
     return _LICENSE_ALIASES.get(key, raw.strip() or "Unknown")
 
+
 def _get_package_license(norm_name: str) -> str:
     """Return the license string for an installed package, or 'Unknown'."""
     try:
         import importlib.metadata as im
+
         meta = im.metadata(norm_name)
-        # Python 3.12+ has License-Expression (SPDX); prefer it
-        lic = meta.get("License-Expression") or meta.get("License") or ""
-        if lic:
+
+        # 1. Try License-Expression (PEP 639)
+        lic_expr = meta.get("License-Expression")
+        if lic_expr:
+            return _normalise_license(lic_expr)
+
+        # 2. Try Classifiers
+        classifiers = meta.get_all("Classifier") or []
+        for c in classifiers:
+            if c.startswith("License :: OSI Approved :: "):
+                return _normalise_license(c.split("::")[-1].strip())
+            elif c.startswith("License :: "):
+                return _normalise_license(c.split("::")[-1].strip())
+
+        # 3. Try License field (but only if it's a short string, not full text)
+        lic = meta.get("License") or ""
+        if lic and len(lic) < 150:
             return _normalise_license(lic)
-    except Exception:
+
+        # 4. Fallback if License is full text but contains keywords
+        if lic:
+            if "MIT License" in lic or "The MIT License" in lic or "MIT" in lic[:50]:
+                return "MIT"
+            if "Apache License" in lic or "Apache-2.0" in lic:
+                return "Apache-2.0"
+            if "BSD" in lic[:50]:
+                return "BSD"
+
+    except im.PackageNotFoundError:
         pass
     return "Unknown"
+
 
 def cmd_license(ctx: Context, args: argparse.Namespace) -> int:
     """Display a license inventory across all packages in the graph."""
@@ -35,11 +85,74 @@ def cmd_license(ctx: Context, args: argparse.Namespace) -> int:
 
     show_packages = getattr(args, "show_packages", False)
 
-    # Gather license for each package
+    # Gather license for each package locally
     license_map: dict[str, list[str]] = {}  # {license_id → [norm_names]}
+    unknown_pkgs = []
+
     for norm_name in sorted(graph.packages):
         lic = _get_package_license(norm_name)
-        license_map.setdefault(lic, []).append(norm_name)
+        if lic == "Unknown":
+            unknown_pkgs.append(norm_name)
+        else:
+            license_map.setdefault(lic, []).append(norm_name)
+
+    if unknown_pkgs:
+        import concurrent.futures
+        import json
+        import urllib.request
+
+        from pyxray.pypi import PYPI_BASE
+
+        def fetch_pypi_license(name: str) -> str:
+            url = f"{PYPI_BASE}/{name}/json"
+            try:
+                with urllib.request.urlopen(url, timeout=5) as resp:
+                    info = json.loads(resp.read()).get("info", {})
+
+                lic_expr = info.get("license_expression")
+                if lic_expr:
+                    return _normalise_license(lic_expr)
+
+                for c in info.get("classifiers", []):
+                    if c.startswith("License :: OSI Approved :: "):
+                        return _normalise_license(c.split("::")[-1].strip())
+                    elif c.startswith("License :: "):
+                        return _normalise_license(c.split("::")[-1].strip())
+
+                lic = info.get("license") or ""
+                if lic and len(lic) < 150:
+                    return _normalise_license(lic)
+
+                if lic:
+                    if (
+                        "MIT License" in lic
+                        or "The MIT License" in lic
+                        or "MIT" in lic[:50]
+                    ):
+                        return "MIT"
+                    if "Apache License" in lic or "Apache-2.0" in lic:
+                        return "Apache-2.0"
+                    if "BSD" in lic[:50]:
+                        return "BSD"
+            except Exception:
+                pass
+            return "Unknown"
+
+        if not ctx.json_output:
+            out.print_err(
+                out.dim(
+                    f"  Fetching licenses for {len(unknown_pkgs)} uninstalled packages from PyPI..."
+                )
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_pkg = {
+                executor.submit(fetch_pypi_license, pkg): pkg for pkg in unknown_pkgs
+            }
+            for future in concurrent.futures.as_completed(future_to_pkg):
+                pkg = future_to_pkg[future]
+                lic = future.result()
+                license_map.setdefault(lic, []).append(pkg)
 
     total = sum(len(v) for v in license_map.values())
     sorted_licenses = sorted(license_map.items(), key=lambda x: -len(x[1]))
