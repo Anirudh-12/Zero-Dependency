@@ -21,22 +21,12 @@ The lock file already contains the fully-resolved graph.
 from __future__ import annotations
 
 import pickle
-import re
 import sys
+import tomllib  # type: ignore[assignment]
 from pathlib import Path
-from typing import Optional
 
 from pyxray.models import DependencyGraph, Package, normalize_name
-from pyxray.requirements import parse_requirement, fast_extract_normalized_name
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    try:
-        import tomllib  # type: ignore[no-redef]
-    except ImportError:
-        tomllib = None  # type: ignore[assignment]
-
+from pyxray.requirements import fast_extract_normalized_name, parse_requirement
 
 # ---------------------------------------------------------------------------
 # Lock file detection
@@ -48,7 +38,7 @@ LOCK_FILE_NAMES = [
 ]
 
 
-def detect_lockfile(root: str) -> Optional[Path]:
+def detect_lockfile(root: str) -> Path | None:
     """Return the first recognised lock file found in *root*, or None."""
     root_path = Path(root)
     for name in LOCK_FILE_NAMES:

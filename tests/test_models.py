@@ -4,14 +4,14 @@ tests/test_models.py — Tests for normalization and core model behaviour.
 Uses only: unittest (stdlib)
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # Ensure pyxray is importable from the project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.models import normalize_name, Package, DependencyGraph, Requirement, Specifier
+from pyxray.models import DependencyGraph, Package, normalize_name
 
 
 class TestNormalizeName(unittest.TestCase):

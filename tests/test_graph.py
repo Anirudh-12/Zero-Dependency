@@ -5,15 +5,14 @@ Uses only: unittest (stdlib)
 Uses synthetic Package objects — does NOT require any real installed packages.
 """
 
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from pyxray.analysis import (
     compute_depths,
-    compute_in_degrees,
     compute_stats,
     find_cycles,
     find_longest_chain,
@@ -22,7 +21,7 @@ from pyxray.analysis import (
     reachable_reverse,
 )
 from pyxray.graph import build_graph
-from pyxray.models import DependencyGraph, Package, Project, Requirement, normalize_name
+from pyxray.models import DependencyGraph, Package, Project, normalize_name
 from pyxray.requirements import parse_requirement
 
 # ---------------------------------------------------------------------------
@@ -30,7 +29,7 @@ from pyxray.requirements import parse_requirement
 # ---------------------------------------------------------------------------
 
 
-def make_pkg(name: str, version: str = "1.0", deps: list[str] = None) -> Package:
+def make_pkg(name: str, version: str = "1.0", deps: list[str] | None = None) -> Package:
     """Helper to create a Package with mocked dependencies."""
     p = Package(
         name=name,
@@ -41,11 +40,9 @@ def make_pkg(name: str, version: str = "1.0", deps: list[str] = None) -> Package
     return p
 
 
-def make_graph(*pkgs: Package, roots: list[str] = None) -> DependencyGraph:
+def make_graph(*pkgs: Package, roots: list[str] | None = None) -> DependencyGraph:
     """Build a DependencyGraph from Package objects."""
     g = DependencyGraph()
-    installed = {p.normalized_name: p for p in pkgs}
-
     for p in pkgs:
         g.add_package(p)
 
@@ -78,7 +75,7 @@ class TestBuildGraph(unittest.TestCase):
             root="/tmp/test",
             declared=[parse_requirement("a")],
         )
-        graph, warnings = build_graph(project, pkgs)
+        graph, _ = build_graph(project, pkgs)
 
         self.assertIn("a", graph.packages)
         self.assertIn("b", graph.packages)

@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Optional
 
 OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 _TIMEOUT = 30  # seconds — batch request can be slow
@@ -27,6 +26,7 @@ _TIMEOUT = 30  # seconds — batch request can be slow
 
 def query_osv_batch(
     packages: list[tuple[str, str]],
+    verbose: bool = False,
 ) -> dict[str, list[dict]]:
     """Query OSV.dev for all (name, version) pairs in a single batched POST.
 
@@ -34,6 +34,8 @@ def query_osv_batch(
     ----------
     packages:
         List of (normalized_name, version) tuples.
+    verbose:
+        If True, print error details to stderr on failure.
 
     Returns
     -------
@@ -62,7 +64,13 @@ def query_osv_batch(
         )
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-    except Exception:
+    except Exception as exc:
+        if verbose:
+            import sys
+            import traceback
+
+            print(f"[osv] Error fetching vulnerabilities: {exc}", file=sys.stderr)
+            traceback.print_exc()
         # Network failure → return empty (silent fail, non-blocking)
         return {}
 
@@ -114,7 +122,7 @@ def format_severity(vuln: dict) -> str:
     return "LOW"
 
 
-def extract_fixed_in(vuln: dict, pkg_name: str) -> Optional[str]:
+def extract_fixed_in(vuln: dict, pkg_name: str) -> str | None:
     """Extract the 'fixed in version' string from an OSV vulnerability.
 
     Returns None if no fix is known.

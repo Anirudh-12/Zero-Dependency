@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from pyxray.models import Project, Requirement, normalize_name
 from pyxray.requirements import parse_requirement
@@ -149,7 +148,7 @@ def _parse_pyproject(path: Path) -> tuple[str, list[Requirement], list[str]]:
 # Project discovery
 # ---------------------------------------------------------------------------
 
-def discover_project(root: Optional[str] = None) -> tuple[Project, list[str]]:
+def discover_project(root: str | None = None) -> tuple[Project, list[str]]:
     """Discover project metadata from *root* directory.
 
     Search order:

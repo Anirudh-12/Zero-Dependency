@@ -4,13 +4,13 @@ tests/test_requirements.py — Tests for the PEP 508 requirement parser.
 Uses only: unittest (stdlib)
 """
 
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.requirements import parse_requirement, evaluate_marker
+from pyxray.requirements import evaluate_marker, parse_requirement
 
 
 class TestParseRequirement(unittest.TestCase):

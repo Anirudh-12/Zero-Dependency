@@ -2,16 +2,17 @@
 tests/test_e2e.py — End-to-end tests running the CLI against the project itself.
 """
 
-import unittest
 import io
-import sys
-import os
 import json
+import os
+import sys
+import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from pyxray.cli import main
+
 
 class TestE2E(unittest.TestCase):
 

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # Package normalisation
@@ -67,8 +65,8 @@ class Requirement:
     normalized_name: str
     extras: frozenset[str]
     specifiers: list[Specifier]
-    marker: Optional[str] = None
-    parse_error: Optional[str] = None
+    marker: str | None = None
+    parse_error: str | None = None
 
     def __str__(self) -> str:
         specs = ",".join(str(s) for s in self.specifiers)
@@ -97,10 +95,10 @@ class Package:
     normalized_name: str
     version: str
     raw_requires: list[str] = field(default_factory=list)
-    metadata_path: Optional[str] = None
+    metadata_path: str | None = None
     
-    _requires_cache: Optional[list[Requirement]] = field(default=None, init=False, repr=False)
-    _top_level_cache: Optional[list[str]] = field(default=None, init=False, repr=False)
+    _requires_cache: list[Requirement] | None = field(default=None, init=False, repr=False)
+    _top_level_cache: list[str] | None = field(default=None, init=False, repr=False)
 
     @property
     def requires(self) -> list[Requirement]:
@@ -117,6 +115,7 @@ class Package:
     def top_level_names(self) -> list[str]:
         if self._top_level_cache is None:
             import importlib.metadata
+
             from pyxray.metadata import _get_top_level_names
             try:
                 # We use the name to find the distribution. If it's a lockfile pkg

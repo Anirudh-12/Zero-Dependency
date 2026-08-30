@@ -28,7 +28,6 @@ from __future__ import annotations
 import platform
 import re
 import sys
-from typing import Optional
 
 from pyxray.models import Requirement, Specifier, normalize_name
 
@@ -52,7 +51,7 @@ _VER_RE = re.compile(r"([A-Za-z0-9._!+*]+)")
 _URL_RE = re.compile(r"@\s*\S+")
 
 
-def fast_extract_normalized_name(raw: str) -> Optional[str]:
+def fast_extract_normalized_name(raw: str) -> str | None:
     """Extremely fast extraction of the normalized package name from a PEP 508 string.
     
     Used during graph construction to avoid fully parsing Requirements.
@@ -146,7 +145,7 @@ def parse_requirement(raw: str) -> Requirement:
         pos = em.end()
 
     # ---- Marker split: everything after ';' -------------------------
-    marker: Optional[str] = None
+    marker: str | None = None
     if ";" in s[pos:]:
         idx = s.index(";", pos)
         marker = s[idx + 1 :].strip() or None
@@ -156,7 +155,7 @@ def parse_requirement(raw: str) -> Requirement:
 
     # ---- Specifiers --------------------------------------------------
     specifiers: list[Specifier] = []
-    parse_error: Optional[str] = None
+    parse_error: str | None = None
 
     if spec_part:
         for chunk in spec_part.split(","):
@@ -229,7 +228,7 @@ def _compare(lhs: str, op: str, rhs: str) -> bool:
     return True  # unknown → include
 
 
-def evaluate_marker(marker: Optional[str], extra: str = "") -> bool:
+def evaluate_marker(marker: str | None, extra: str = "") -> bool:
     """Return True if *marker* passes for the current environment.
 
     This is a best-effort partial evaluator. Unknown variables → include.

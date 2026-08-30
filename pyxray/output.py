@@ -21,15 +21,14 @@ from __future__ import annotations
 import json
 import os
 import sys
-import textwrap
-from typing import Any, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Color support detection
 # ---------------------------------------------------------------------------
 
 
-def _should_use_color(force: Optional[bool] = None) -> bool:
+def _should_use_color(force: bool | None = None) -> bool:
     if force is not None:
         return force
     if os.environ.get("NO_COLOR"):
@@ -170,9 +169,9 @@ def render_tree(
     children_fn,  # callable: (node_name) → list[str]
     display_fn=None,  # callable: (node_name) → str  (for display)
     prefix: str = "",
-    seen: Optional[set[str]] = None,
+    seen: set[str] | None = None,
     depth: int = 0,
-    max_depth: Optional[int] = None,
+    max_depth: int | None = None,
     _is_last: bool = True,
 ) -> list[str]:
     """Recursively render a dependency tree as lines of text.
@@ -253,8 +252,8 @@ def render_tree(
 
 def render_table(
     rows: list[tuple[str, ...]],
-    headers: Optional[tuple[str, ...]] = None,
-    col_widths: Optional[list[int]] = None,
+    headers: tuple[str, ...] | None = None,
+    col_widths: list[int] | None = None,
 ) -> list[str]:
     """Render rows as a fixed-width table."""
     if not rows:

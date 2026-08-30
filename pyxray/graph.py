@@ -19,16 +19,12 @@ Replaces: networkx, pipdeptree, graphlib (limited), packaging
 
 from __future__ import annotations
 
-import sys
 from collections import deque
-from typing import Optional
 
 from pyxray.models import (
     DependencyGraph,
     Package,
     Project,
-    Requirement,
-    normalize_name,
 )
 from pyxray.requirements import evaluate_marker
 

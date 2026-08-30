@@ -8,34 +8,32 @@ import json
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.cli import (
-    Context,
-    cmd_audit,
-    cmd_check,
-    cmd_compare,
-    cmd_cycles,
-    cmd_duplicates,
-    cmd_env,
-    cmd_export,
-    cmd_hotspots,
-    cmd_impact,
-    cmd_imports,
-    cmd_license,
-    cmd_longest_chain,
-    cmd_outdated,
-    cmd_prune,
-    cmd_security,
-    cmd_stats,
-    cmd_summary,
-    cmd_tree,
-    cmd_unused_extras,
-    cmd_why,
-)
-from pyxray.models import DependencyGraph, Package, Project, Requirement, SourceImport
+from pyxray.cli import Context
+from pyxray.commands.audit import cmd_audit
+from pyxray.commands.check import cmd_check
+from pyxray.commands.compare import cmd_compare
+from pyxray.commands.cycles import cmd_cycles
+from pyxray.commands.duplicates import cmd_duplicates
+from pyxray.commands.env import cmd_env
+from pyxray.commands.export import cmd_export
+from pyxray.commands.hotspots import cmd_hotspots
+from pyxray.commands.impact import cmd_impact
+from pyxray.commands.imports import cmd_imports
+from pyxray.commands.license import cmd_license
+from pyxray.commands.longest_chain import cmd_longest_chain
+from pyxray.commands.outdated import cmd_outdated
+from pyxray.commands.prune import cmd_prune
+from pyxray.commands.security import cmd_security
+from pyxray.commands.stats import cmd_stats
+from pyxray.commands.summary import cmd_summary
+from pyxray.commands.tree import cmd_tree
+from pyxray.commands.unused_extras import cmd_unused_extras
+from pyxray.commands.why import cmd_why
+from pyxray.models import DependencyGraph, Package, Project, Requirement
 
 
 class MockContext(Context):
@@ -45,6 +43,7 @@ class MockContext(Context):
             no_color=True,
             json_output=json_output,
             quiet=quiet,
+            verbose=False,
         )
         # Setup dummy graph
         g = DependencyGraph()
@@ -234,13 +233,8 @@ class TestCLICommands(unittest.TestCase):
         self.args.narrow = 3
         self.args.shallow = 5
         
-        # We need to catch if prune isn't a direct import in cli.py, 
-        # let's just avoid checking output for prune if it errors in mock.
-        try:
-            cmd_prune(self.ctx, self.args)
-            self.assertIn("Prune", self.get_output())
-        except Exception:
-            pass
+        cmd_prune(self.ctx, self.args)
+        self.assertIn("Prune", self.get_output())
 
     @patch('pyxray.source.scan_with_usage')
     @patch('pyxray.analysis.compute_prune_candidates', create=True)
@@ -250,12 +244,9 @@ class TestCLICommands(unittest.TestCase):
         self.args.thin = 3
         self.args.narrow = 3
         self.args.shallow = 5
-        try:
-            cmd_prune(self.ctx_json, self.args)
-            data = self.get_json()
-            self.assertIn("candidates", data)
-        except Exception:
-            pass
+        cmd_prune(self.ctx_json, self.args)
+        data = self.get_json()
+        self.assertIn("candidates", data)
     def test_cmd_env(self):
         cmd_env(self.ctx, self.args)
         out = self.get_output()

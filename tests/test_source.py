@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from pyxray.models import Package, SourceImport, normalize_name
+from pyxray.models import Package, SourceImport
 from pyxray.source import (
     build_import_map,
     classify_imports,
@@ -56,7 +56,7 @@ class TestExtractImports(unittest.TestCase):
 
     def test_dotted_import(self):
         self._tmp = write_temp_py("import os.path\n")
-        imports, err = extract_imports_from_file(self._tmp)
+        imports, _ = extract_imports_from_file(self._tmp)
         self.assertEqual(imports[0].module, "os")  # top-level only
 
     def test_multiple_imports(self):
@@ -108,13 +108,13 @@ class TestClassifyImports(unittest.TestCase):
     def test_third_party_classified(self):
         imp_map = {"requests": "requests"}
         imports = [self._make_import("requests")]
-        third, stdlib, unknown = classify_imports(imports, imp_map)
+        third, _, _ = classify_imports(imports, imp_map)
         self.assertIn("requests", third)
 
     def test_unknown_classified(self):
         imp_map = {}
         imports = [self._make_import("totally_unknown_pkg")]
-        third, stdlib, unknown = classify_imports(imports, imp_map)
+        _, _, unknown = classify_imports(imports, imp_map)
         self.assertIn("totally_unknown_pkg", unknown)
 
 

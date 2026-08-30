@@ -33,17 +33,15 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Optional
 
-from pyxray.models import Package, DependencyGraph, normalize_name
-from pyxray.requirements import parse_requirement, evaluate_marker
-
+from pyxray.models import DependencyGraph, Package, normalize_name
+from pyxray.requirements import evaluate_marker, parse_requirement
 
 # ---------------------------------------------------------------------------
 # In-process cache (avoids re-fetching the same package twice per run)
 # ---------------------------------------------------------------------------
 
-_CACHE: dict[str, Optional[dict]] = {}
+_CACHE: dict[str, dict | None] = {}
 
 PYPI_BASE = "https://pypi.org/pypi"
 REQUEST_DELAY = 0.05  # 50ms between requests — polite to PyPI
@@ -53,7 +51,8 @@ REQUEST_DELAY = 0.05  # 50ms between requests — polite to PyPI
 # Fetch helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_json(url: str, timeout: int = 10) -> Optional[dict]:
+
+def _fetch_json(url: str, timeout: float = 3.0, verbose: bool = False) -> dict | None:
     """Fetch *url* and parse JSON. Returns None on any error."""
     if url in _CACHE:
         return _CACHE[url]
@@ -70,17 +69,29 @@ def _fetch_json(url: str, timeout: int = 10) -> Optional[dict]:
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             _CACHE[url] = None
+        if verbose:
+            import sys
+            import traceback
+
+            print(f"[pypi] HTTP error fetching {url}: {exc}", file=sys.stderr)
+            traceback.print_exc()
         return None
-    except Exception:
+    except Exception as exc:
+        if verbose:
+            import sys
+            import traceback
+
+            print(f"[pypi] Error fetching {url}: {exc}", file=sys.stderr)
+            traceback.print_exc()
         _CACHE[url] = None
         return None
 
 
 def fetch_package_metadata(
     name: str,
-    version: Optional[str] = None,
+    version: str | None = None,
     verbose: bool = False,
-) -> Optional[Package]:
+) -> Package | None:
     """Fetch metadata for *name* (optionally at *version*) from PyPI.
 
     Returns a Package object or None if not found / network error.
@@ -93,9 +104,10 @@ def fetch_package_metadata(
         url = f"{PYPI_BASE}/{name}/json"
 
     if verbose:
+        import sys
         print(f"  [pypi] fetching {name}...", file=sys.stderr)
 
-    data = _fetch_json(url)
+    data = _fetch_json(url, verbose=verbose)
     if not data:
         return None
 
@@ -119,8 +131,9 @@ def fetch_package_metadata(
 # Graph builder via PyPI
 # ---------------------------------------------------------------------------
 
+
 def build_graph_from_pypi(
-    declared_reqs: list,          # list[Requirement]
+    declared_reqs: list,  # list[Requirement]
     max_packages: int = 300,
     verbose: bool = False,
 ) -> tuple[DependencyGraph, list[str]]:
@@ -207,14 +220,14 @@ def build_graph_from_pypi(
 # ---------------------------------------------------------------------------
 
 
-def fetch_latest_version(name: str) -> Optional[str]:
+def fetch_latest_version(name: str, verbose: bool = False) -> str | None:
     """Return the latest version of *name* on PyPI, or None on error/not found.
 
     Uses the existing in-process _CACHE to avoid duplicate requests.
     """
     url = f"{PYPI_BASE}/{name}/json"
-    data = _fetch_json(url)
+    data = _fetch_json(url, verbose=verbose)
     if not data:
         return None
-    return data.get("info", {}).get("version")
-
+    info = data.get("info", {})
+    return info.get("version")

@@ -24,13 +24,12 @@ from __future__ import annotations
 
 import ast
 import os
-import sys
 import pickle
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from pyxray.models import Package, SourceImport, normalize_name
+from pyxray.models import Package, SourceImport
 
 # ---------------------------------------------------------------------------
 # Symbol-level usage tracking (for prune command)
@@ -300,7 +299,7 @@ _STDLIB: frozenset[str] = _stdlib_modules()
 # ---------------------------------------------------------------------------
 
 
-def extract_imports_from_file(path: Path) -> tuple[list[SourceImport], Optional[str]]:
+def extract_imports_from_file(path: Path) -> tuple[list[SourceImport], str | None]:
     """Parse *path* with ast and return all import statements.
 
     Returns (imports, error_message).  On parse error returns ([], error).
@@ -353,7 +352,7 @@ def extract_imports_from_file(path: Path) -> tuple[list[SourceImport], Optional[
 def scan_source_roots(
     source_roots: list[str],
     project_root: str,
-    skip_patterns: Optional[list[str]] = None,
+    skip_patterns: list[str] | None = None,
 ) -> tuple[list[SourceImport], list[str]]:
     """Recursively scan *source_roots* for .py files and extract imports.
 
@@ -391,7 +390,7 @@ def scan_source_roots(
         try:
             with open(cache_file, "rb") as f:
                 ast_cache = pickle.load(f)
-        except Exception:
+        except (FileNotFoundError, EOFError, pickle.UnpicklingError):
             pass
             
     cache_updated = False
@@ -445,7 +444,7 @@ def scan_source_roots(
             cache_file.parent.mkdir(exist_ok=True)
             with open(cache_file, "wb") as f:
                 pickle.dump(ast_cache, f)
-        except Exception:
+        except OSError:
             pass
 
     return all_imports, warnings
@@ -529,8 +528,8 @@ def classify_imports(
 def build_usage_map(
     imports: list[SourceImport],
     import_map: dict[str, str],
-    raw_symbols: Optional[list] = None,
-) -> dict[str, "SourceUsage"]:
+    raw_symbols: list | None = None,
+) -> dict[str, SourceUsage]:
     """Build a per-package SourceUsage map from a list of SourceImports.
 
     For each third-party package detected, records:
@@ -571,8 +570,8 @@ def build_usage_map(
     return usage
 
 
-def extract_imports_with_symbols(path: "Path") -> tuple[
-    list[SourceImport], list[set[str]], Optional[str]
+def extract_imports_with_symbols(path: Path) -> tuple[
+    list[SourceImport], list[set[str]], str | None
 ]:
     """Like extract_imports_from_file but also returns per-import symbol sets.
 
@@ -609,21 +608,20 @@ def extract_imports_with_symbols(path: "Path") -> tuple[
                 ))
                 symbol_sets.append({"*"})  # bare import = full module
 
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.level == 0:
-                top = node.module.split(".")[0]
-                # Collect imported names
-                names = set()
-                for alias in node.names:
-                    if alias.name == "*":
-                        names.add("*")
-                    else:
-                        names.add(alias.name)
-                imports.append(SourceImport(
-                    module=top, file=str(path),
-                    line=node.lineno, col=node.col_offset, is_from=True,
-                ))
-                symbol_sets.append(names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            top = node.module.split(".")[0]
+            # Collect imported names
+            names = set()
+            for alias in node.names:
+                if alias.name == "*":
+                    names.add("*")
+                else:
+                    names.add(alias.name)
+            imports.append(SourceImport(
+                module=top, file=str(path),
+                line=node.lineno, col=node.col_offset, is_from=True,
+            ))
+            symbol_sets.append(names)
 
     return imports, symbol_sets, None
 
@@ -632,8 +630,8 @@ def scan_with_usage(
     source_roots: list[str],
     project_root: str,
     import_map: dict[str, str],
-    skip_patterns: Optional[list[str]] = None,
-) -> tuple[list[SourceImport], dict[str, "SourceUsage"], list[str]]:
+    skip_patterns: list[str] | None = None,
+) -> tuple[list[SourceImport], dict[str, SourceUsage], list[str]]:
     """Scan source roots and return both raw imports and per-package usage maps.
 
     Returns (all_imports, usage_map, warnings).
@@ -655,7 +653,7 @@ def scan_with_usage(
         try:
             with open(cache_file, "rb") as f:
                 ast_cache = pickle.load(f)
-        except Exception:
+        except (FileNotFoundError, EOFError, pickle.UnpicklingError):
             pass
             
     cache_updated = False
@@ -711,7 +709,7 @@ def scan_with_usage(
             cache_file.parent.mkdir(exist_ok=True)
             with open(cache_file, "wb") as f:
                 pickle.dump(ast_cache, f)
-        except Exception:
+        except OSError:
             pass
 
     usage_map = build_usage_map(all_imports, import_map, all_symbols)

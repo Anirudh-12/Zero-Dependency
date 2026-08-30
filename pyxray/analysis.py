@@ -17,7 +17,6 @@ Algorithms implemented:
 from __future__ import annotations
 
 from collections import deque
-from typing import Optional
 
 from pyxray.models import DependencyGraph, Package
 
@@ -146,7 +145,7 @@ def find_cycles(graph: DependencyGraph) -> list[list[str]]:
     """
     WHITE, GREY, BLACK = 0, 1, 2
     colour: dict[str, int] = {n: WHITE for n in graph.all_nodes()}
-    parent: dict[str, Optional[str]] = {n: None for n in graph.all_nodes()}
+    parent: dict[str, str | None] = {n: None for n in graph.all_nodes()}
     cycles: list[list[str]] = []
     seen_cycles: set[frozenset[str]] = set()
 
@@ -263,7 +262,7 @@ def _normalize_name_local(name: str) -> str:
 
 def find_longest_chain(
     graph: DependencyGraph,
-    cycles: Optional[list[list[str]]] = None,
+    cycles: list[list[str]] | None = None,
 ) -> list[str]:
     """Return a longest dependency chain starting from a root.
 
@@ -453,7 +452,7 @@ class PruneCandidate:
 
 
 def compute_prune_candidates(
-    graph: "DependencyGraph",
+    graph: DependencyGraph,
     usage_map: dict,  # norm_name → SourceUsage
     thin_threshold: int = 3,  # transitive deps ≤ this → "thin"
     narrow_threshold: int = 3,  # files ≤ this → "narrow"
@@ -512,7 +511,7 @@ def compute_prune_candidates(
             label = "REIMPLEMENT"
             confidence = "HIGH" if transitive_count == 0 else "MEDIUM"
             reason = (
-                f"Zero deps of its own"
+                "Zero deps of its own"
                 if transitive_count == 0
                 else f"Only {transitive_count} transitive dep(s)"
             )

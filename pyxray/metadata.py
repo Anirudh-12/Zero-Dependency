@@ -17,13 +17,10 @@ Reads:
 from __future__ import annotations
 
 import importlib.metadata
-import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 from pyxray.models import Package, normalize_name
-from pyxray.requirements import parse_requirement
 
 # ---------------------------------------------------------------------------
 # Top-level import name discovery
@@ -70,8 +67,7 @@ def _top_level_from_record(dist: importlib.metadata.Distribution) -> list[str]:
         if top.endswith(".dist-info") or top.endswith(".data"):
             continue
         # Strip .py suffix for single-file modules
-        if top.endswith(".py"):
-            top = top[:-3]
+        top = top.removesuffix(".py")
         if top and not top.startswith("_") or top == "__future__":
             names.add(top)
     return sorted(names)
@@ -144,7 +140,7 @@ def discover_all_installed() -> dict[str, Package]:
     return packages
 
 
-def get_package(name: str) -> Optional[Package]:
+def get_package(name: str) -> Package | None:
     """Fetch metadata for a single named distribution, or None if not found."""
     try:
         dist = importlib.metadata.distribution(name)
