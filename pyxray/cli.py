@@ -1743,7 +1743,30 @@ def cmd_security(ctx: Context, args: argparse.Namespace) -> int:
             )
         )
 
-    vuln_results = query_osv_batch(packages)
+    import json
+    import os
+
+    snapshot_file = os.path.join(ctx.project_root, "pyxray-security-snapshot.json")
+    is_offline = getattr(args, "offline", False)
+    update_snapshot = getattr(args, "update_snapshot", False)
+
+    vuln_results = {}
+    
+    if is_offline:
+        if not os.path.exists(snapshot_file):
+            out.print_err(f"Offline mode requested, but {snapshot_file} not found.")
+            return 1
+        with open(snapshot_file, "r", encoding="utf-8") as f:
+            vuln_results = json.load(f)
+        if not ctx.json_output:
+            out.println(out.dim(f"  Loaded {len(vuln_results)} records from offline snapshot.\n"))
+    else:
+        vuln_results = query_osv_batch(packages)
+        if update_snapshot:
+            with open(snapshot_file, "w", encoding="utf-8") as f:
+                json.dump(vuln_results, f, indent=2)
+            if not ctx.json_output:
+                out.println(out.dim(f"  Snapshot saved to {snapshot_file}\n"))
 
     # Filter by min severity
     findings: list[dict] = []
@@ -2156,6 +2179,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["low", "medium", "high", "critical"],
         default="low",
         help="Minimum severity to display (default: low)",
+    )
+    p_sec.add_argument(
+        "--update-snapshot",
+        action="store_true",
+        help="Download latest vulnerabilities from OSV.dev and save to pyxray-security.json",
+    )
+    p_sec.add_argument(
+        "--offline",
+        action="store_true",
+        help="Run offline using pyxray-security.json instead of querying OSV.dev",
     )
     p_sec.set_defaults(func=cmd_security)
 
