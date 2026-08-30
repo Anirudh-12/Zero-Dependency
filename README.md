@@ -44,7 +44,7 @@ python -m pyxray audit
 ```
 
 ### Developer Setup
-If you want to run the test suite (101 tests) or package the project:
+If you want to run the test suite (125 tests) or package the project:
 ```bash
 make test   # Runs: uv run python -m unittest discover tests
 make build  # Runs: uv build
@@ -68,17 +68,36 @@ make build  # Runs: uv build
 | Which packages are good candidates for removal? | `prune` |
 | What's the longest dep chain? | `longest-chain` |
 | Detailed graph metrics? | `stats` |
+| Show Python environment and project info? | `env` |
+| CI pass/fail gate (cycles/depth/missing)? | `check` |
+| Show license inventory across all packages? | `license` |
+| Export dependency graph as Mermaid/Graphviz? | `export` |
+| Diff two lock files? | `compare` |
+| Find unused extras? | `unused-extras` |
+| Check for outdated packages vs PyPI? | `outdated` |
+| Check for CVEs via OSV.dev? | `security` |
 
 *(All commands support `--json` for scripting and pipeline integration, and `--root DIR` to target specific projects).*
 
 ### Command Details
 
-* **`summary`**: Project-level overview. Direct deps, transitive deps, depth, cycles, hotspots.
+All commands support `--json` for scripting and pipeline integration, and `--root DIR` to target specific projects.
+
+* **`summary ===`**: Provides detailed output for summary ===.
 
 <details>
-<summary><b>Example Output (fastapi: `summary`)</b></summary>
+<summary><b>Example Output (fastapi: `summary ===`)</b></summary>
 
 ```text
+____       __  ____             
+ |  _ \ _   _\ \/ /  _ \ __ _ _   _
+ | |_) | | | |\  /| |_) / _` | | | |
+ |  __/| |_| |/  \|  _ < (_| | |_| |
+ |_|    \__, /_/\_\_| \_\__,_|\__, |
+        |___/                  |___/ 
+  Python Dependency Investigation Tool
+
+
 Project: fastapi
 ──────────────────────────────────────────────────
   Direct dependencies            5
@@ -94,14 +113,16 @@ Project: fastapi
 
   Largest subtree                starlette → 12 packages
   Most depended upon             typing-extensions → 37 dependents
+
+  Health                         D  (2 cycle(s))
 ```
 
 </details>
 
-* **`tree [--depth N]`**: Full ASCII dependency tree with box-drawing characters.
+* **`tree ===`**: Provides detailed output for tree ===.
 
 <details>
-<summary><b>Example Output (fastapi: `tree --depth 2`)</b></summary>
+<summary><b>Example Output (fastapi: `tree ===`)</b></summary>
 
 ```text
 Dependency Tree — fastapi
@@ -134,40 +155,36 @@ Dependency Tree — fastapi
   │   │   └── sortedcontainers 2.4.0 [depth limit]
   │   └── typing-extensions 4.16.0
   └── typing-extensions 4.16.0 [already shown]
-
-  typing-extensions 4.16.0
-
-  typing-inspection 0.4.2
-  └── typing-extensions 4.16.0
+...
 ```
 
 </details>
 
-* **`why PACKAGE`**: Find all dependency paths that explain why a package is installed. Uses BFS from project roots to target.
+* **`why ===`**: Provides detailed output for why ===.
 
 <details>
-<summary><b>Example Output (fastapi: `why pydantic`)</b></summary>
+<summary><b>Example Output (fastapi: `why ===`)</b></summary>
 
 ```text
-Why is 'pydantic' installed? (2.13.4)
+Why is 'requests' installed? (2.33.0)
 ──────────────────────────────────────────────────
-
-  Path 1
-    pydantic (2.13.4)
+  No path found from project roots to 'requests'.
+  It may be installed but not reachable from declared dependencies.
 ```
 
 </details>
 
-* **`impact PACKAGE`**: Which packages depend on PACKAGE, transitively? Uses reverse graph traversal.
+* **`impact ===`**: Provides detailed output for impact ===.
 
 <details>
-<summary><b>Example Output (fastapi: `impact typing-extensions`)</b></summary>
+<summary><b>Example Output (fastapi: `impact ===`)</b></summary>
 
 ```text
 Impact of 'typing-extensions' (4.16.0)
 ──────────────────────────────────────────────────
   If 'typing-extensions' disappeared, 67 package(s) would be affected:
 
+  Direct dependents                      ── 65 package(s)
           a2wsgi 1.10.10
           anthropic 0.109.0
           anyio 4.12.1
@@ -175,7 +192,6 @@ Impact of 'typing-extensions' (4.16.0)
           black 26.5.1
           cross-web 0.7.0
           cryptography 50.0.0
-          exceptiongroup 1.3.1
           fastapi ?
           fastapi-cli 0.0.32
           fastapi-cloud-cli 0.11.0
@@ -194,35 +210,15 @@ Impact of 'typing-extensions' (4.16.0)
           logfire 4.22.0
           mcp 1.26.0
           mkdocstrings 1.0.4
-          mkdocstrings-python 2.0.3
-          mypy 2.3.0
-          openai 2.52.0
-          opentelemetry-api 1.39.1
-          opentelemetry-exporter-otlp-proto-http 1.39.1
-          opentelemetry-instrumentation 0.60b1
-          opentelemetry-instrumentation-httpx 0.60b1
-          opentelemetry-sdk 1.39.1
-          opentelemetry-semantic-conventions 0.60b1
-          playwright 1.61.0
-          py-key-value-aio 0.4.4
-    ⊕ root  pydantic 2.13.4
-          pydantic-ai 2.18.0
-          pydantic-ai-slim 2.18.0
-          pydantic-core 2.46.4
-          pydantic-evals 2.18.0
-          pydantic-extra-types 2.11.0
-          pydantic-graph 2.18.0
-          pydantic-settings 2.14.2
-          pyee 13.0.0
-... (truncated for brevity)
+...
 ```
 
 </details>
 
-* **`cycles`**: Detect circular dependencies using DFS node-colouring. Reports each cycle once.
+* **`cycles ===`**: Provides detailed output for cycles ===.
 
 <details>
-<summary><b>Example Output (fastapi: `cycles`)</b></summary>
+<summary><b>Example Output (fastapi: `cycles ===`)</b></summary>
 
 ```text
 Circular Dependencies
@@ -242,10 +238,10 @@ Circular Dependencies
 
 </details>
 
-* **`duplicates`**: Detect packages installed with multiple versions (common in complex environments).
+* **`duplicates ===`**: Provides detailed output for duplicates ===.
 
 <details>
-<summary><b>Example Output (fastapi: `duplicates`)</b></summary>
+<summary><b>Example Output (fastapi: `duplicates ===`)</b></summary>
 
 ```text
 Duplicate Package Versions
@@ -255,65 +251,51 @@ Duplicate Package Versions
 
 </details>
 
-* **`hotspots [--top N]`**: Packages sorted by in-degree (number of dependents). Useful for identifying high-risk packages.
+* **`hotspots ===`**: Provides detailed output for hotspots ===.
 
 <details>
-<summary><b>Example Output (fastapi: `hotspots --top 5`)</b></summary>
+<summary><b>Example Output (fastapi: `hotspots ===`)</b></summary>
 
 ```text
-Dependency Hotspots (top 5)
+Dependency Hotspots (top 20)
 ──────────────────────────────────────────────────
-  Packages with the most reverse dependencies (in-degree).
+  Packages with the most reverse dependencies (in-degree).  Risk = dependents × (1 + subtree_size)
 
   typing-extensions 4.16.0
-  ████████████████████  37 dependents
+  ████████████████████  37 dependents  subtree: 0  risk: 37
 
   pydantic 2.13.4
-  ███████░░░░░░░░░░░░░  14 dependents
+  ███████░░░░░░░░░░░░░  14 dependents  subtree: 7  risk: 112
 
   anyio 4.12.1
-  █████░░░░░░░░░░░░░░░  11 dependents
+  █████░░░░░░░░░░░░░░░  11 dependents  subtree: 10  risk: 121
 
   httpx 0.28.1
-  █████░░░░░░░░░░░░░░░  10 dependents
+  █████░░░░░░░░░░░░░░░  10 dependents  subtree: 14  risk: 150
 
   pyyaml 6.0.3
-  ████░░░░░░░░░░░░░░░░  9 dependents
+  ████░░░░░░░░░░░░░░░░  9 dependents  subtree: 0  risk: 9
+
+  tomli 2.4.0
+  ████░░░░░░░░░░░░░░░░  8 dependents  subtree: 0  risk: 8
+
+  rich 14.3.2
+  ████░░░░░░░░░░░░░░░░  8 dependents  subtree: 3  risk: 32
+
+  markdown 3.10.1
+  ███░░░░░░░░░░░░░░░░░  7 dependents  subtree: 0  risk: 7
+
+  opentelemetry-api 1.39.1
+  ███░░░░░░░░░░░░░░░░░  7 dependents  subtree: 3  risk: 28
+...
 ```
 
 </details>
 
-* **`stats`**: Detailed graph metrics: total nodes/edges, max/avg depth, fan-in/fan-out, cycles, missing packages.
+* **`longest-chain ===`**: Provides detailed output for longest-chain ===.
 
 <details>
-<summary><b>Example Output (fastapi: `stats`)</b></summary>
-
-```text
-Graph Statistics — fastapi
-──────────────────────────────────────────────────
-  Packages (total)                 205           # nodes
-  Direct dependencies              5             # root nodes
-  Transitive dependencies          200           # non-root nodes
-  Dependency edges                 403           # edges
-  Leaf packages                    89            # no outgoing edges
-  Missing packages                 0             # not installed
-
-  Maximum depth                    4             # hops from a root
-  Average depth                    1.63          # BFS from roots
-  Maximum fan-out                  23            # direct deps of one package
-  Maximum fan-in                   37            # dependents of one package
-
-  Cycle count                      2             # strongly connected
-  Largest subtree                  starlette (12 pkgs)  # from one root
-  Most depended upon               typing-extensions (37 deps)  # highest in-degree
-```
-
-</details>
-
-* **`longest-chain`**: Find the longest dependency path from any root. Uses topological sort + DP on DAGs, falls back to cycle-safe DFS.
-
-<details>
-<summary><b>Example Output (fastapi: `longest-chain`)</b></summary>
+<summary><b>Example Output (fastapi: `longest-chain ===`)</b></summary>
 
 ```text
 Longest Dependency Chain
@@ -330,19 +312,19 @@ Longest Dependency Chain
 
 </details>
 
-* **`imports [--no-unknown]`**: Scan project source files with `ast` and classify imports as stdlib, third-party, or unknown.
+* **`imports ===`**: Provides detailed output for imports ===.
 
 <details>
-<summary><b>Example Output (fastapi: `imports --no-unknown`)</b></summary>
+<summary><b>Example Output (fastapi: `imports ===`)</b></summary>
 
 ```text
 Source Import Summary — fastapi
 ──────────────────────────────────────────────────
-  Source roots              C:\Users\aksha\OneDrive\Documents\fastapi, C:\Users\aksha\OneDrive\Documents\fastapi\fastapi
+  Source roots              c:\Users\aksha\OneDrive\Documents\fastapi, c:\Users\aksha\OneDrive\Documents\fastapi\fastapi
   Total import statements   3362
-  Third-party detected      30
+  Third-party detected      36
   Standard library          44
-  Unclassified              12
+  Unclassified              5
 
 
   Third-party imports detected:
@@ -354,6 +336,7 @@ Source Import Summary — fastapi
     • fastapi
     • fastapi-cli
     • flask
+    • gitpython
     • httpx
     • inline-snapshot
     • jinja2
@@ -365,86 +348,33 @@ Source Import Summary — fastapi
     • pydantic-core
     • pydantic-extra-types
     • pydantic-settings
-    • pytest
-    • python-multipart
-    • rich
-    • ruff
-    • sqlalchemy
-    • sqlmodel
-    • starlette
-    • typer
-    • typing-extensions
-    • typing-inspection
-    • uvicorn
+...
 ```
 
 </details>
 
-* **`audit`**: Compare declared dependencies with detected source imports. Identifies potentially unused declarations and undeclared imports.
+* **`audit ===`**: Provides detailed output for audit ===.
 
 <details>
-<summary><b>Example Output (fastapi: `audit`)</b></summary>
+<summary><b>Example Output (fastapi: `audit ===`)</b></summary>
 
 ```text
 Dependency Audit — fastapi
 ──────────────────────────────────────────────────
   Declared dependencies               5
-  Third-party imports detected        30
+  Third-party imports detected        36
   Potentially unused declarations     0
-  Potentially undeclared imports      25
+  Potentially undeclared imports      31
 
   ✗  Imported but not in declared dependencies  (may be a transitive dep being imported directly)
-    • a2wsgi
-        docs_src\wsgi\tutorial001_py310.py:1
-    • anyio
-        docs_src\custom_response\tutorial007_py310.py:1
-        fastapi\concurrency.py:6
-        fastapi\concurrency.py:7
-        fastapi\routing.py:42
-        fastapi\routing.py:44
-    • dirty-equals
-        tests\test_filter_pydantic_sub_model_pv2.py:2
-        tests\test_multi_body_errors.py:3
-        tests\test_nested_annotated_in_sequence.py:3
-        tests\test_pydanticv2_dataclasses_uuid_stringified_annotations.py:6
-        tests\test_request_param_model_by_alias.py:1
-    • email-validator
-        fastapi\openapi\models.py:17
-    • fastapi
-        docs_src\additional_responses\tutorial001_py310.py:1
-        docs_src\additional_responses\tutorial001_py310.py:2
-        docs_src\additional_responses\tutorial002_py310.py:1
-        docs_src\additional_responses\tutorial002_py310.py:2
-        docs_src\additional_responses\tutorial003_py310.py:1
-    • fastapi-cli
-        fastapi\cli.py:2
-    • flask
-        docs_src\wsgi\tutorial001_py310.py:3
-    • httpx
-        docs_src\async_tests\app_a_py310\test_main.py:2
-        scripts\notify_translations.py:8
-        scripts\sponsors.py:8
-        scripts\playwright\cookie_param_models\image01.py:4
-        scripts\playwright\header_param_models\image01.py:4
-    • inline-snapshot
-        tests\test_additional_properties.py:3
-        tests\test_additional_properties_bool.py:3
-        tests\test_additional_responses_custom_model_in_callback.py:3
-        tests\test_additional_responses_custom_validationerror.py:4
-        tests\test_additional_responses_default_validationerror.py:3
-    • jinja2
-        scripts\docs.py:15
-    • markupsafe
-        docs_src\wsgi\tutorial001_py310.py:4
-... (truncated for brevity)
 ```
 
 </details>
 
-* **`prune [--thin N] [--narrow N] [--shallow N]`**: Find packages that are good candidates for removal or reimplementation.
+* **`prune ===`**: Provides detailed output for prune ===.
 
 <details>
-<summary><b>Example Output (fastapi: `prune --thin 3 --narrow 3 --shallow 5`)</b></summary>
+<summary><b>Example Output (fastapi: `prune ===`)</b></summary>
 
 ```text
 Prune Candidates — fastapi
@@ -453,6 +383,7 @@ Prune Candidates — fastapi
       Confidence: MEDIUM
       Only 1 transitive dep(s); used in 1 file(s); only 1 symbol(s)
       imported: is_typealiastype
+      Suggestion: inspect.get_annotations() covers most use cases (Python 3.10+)
 
   ✓ annotated-doc (0.0.4)  —  KEEP
       Confidence: LOW
@@ -477,9 +408,122 @@ Prune Candidates — fastapi
 
 </details>
 
+* **`env ===`**: Provides detailed output for env ===.
+
+<details>
+<summary><b>Example Output (fastapi: `env ===`)</b></summary>
+
+```text
+Python Environment
+──────────────────────────────────────────────────
+  Python version         3.11.9  (CPython)
+  Executable             C:\Users\aksha\OneDrive\Documents\fastapi\.venv\Scripts\python.exe
+  Virtual env            C:\Users\aksha\OneDrive\Documents\fastapi\.venv
+  Site-packages          C:\Users\aksha\OneDrive\Documents\fastapi\.venv\Lib\site-packages
+  Platform               win32  (Windows-10-10.0.26200-SP0)
+  Lock file              uv.lock
+  Project root           C:\Users\aksha\OneDrive\Documents\fastapi
+```
+
+</details>
+
+* **`check ===`**: Provides detailed output for check ===.
+
+<details>
+<summary><b>Example Output (fastapi: `check ===`)</b></summary>
+
+```text
+Dependency Health Check — fastapi
+──────────────────────────────────────────────────
+  ✗  cycles         2 cycle(s) detected
+  ✓  missing        0 missing packages
+  ✓  depth          4 (limit: 10)
+
+  Result: FAIL  (1 check(s) failed)
+```
+
+</details>
+
+* **`license ===`**: Provides detailed output for license ===.
+
+<details>
+<summary><b>Example Output (fastapi: `license ===`)</b></summary>
+
+```text
+License Inventory — fastapi
+──────────────────────────────────────────────────
+  205 packages analysed
+
+  MIT                     104 packages  ██████████████████
+  Apache-2.0               33 packages  █████░░░░░░░░░░░░░
+  BSD                      22 packages  ███░░░░░░░░░░░░░░░
+  BSD-3-Clause             18 packages  ███░░░░░░░░░░░░░░░
+  ISC                       6 packages  █░░░░░░░░░░░░░░░░░
+  BSD-2-Clause              3 packages  ░░░░░░░░░░░░░░░░░░
+  Mozilla Public License 2.0 (MPL 2.0)    2 packages  ░░░░░░░░░░░░░░░░░░
+  Python Software Foundation License    2 packages  ░░░░░░░░░░░░░░░░░░
+  ISC License (ISCL)        2 packages  ░░░░░░░░░░░░░░░░░░
+  LGPL-3.0-or-later         1 packages  ░░░░░░░░░░░░░░░░░░
+  Apache-2.0 OR BSD-3-Clause    1 packages  ░░░░░░░░░░░░░░░░░░
+  The Unlicense (Unlicense)    1 packages  ░░░░░░░░░░░░░░░░░░
+  MIT AND Python-2.0        1 packages  ░░░░░░░░░░░░░░░░░░
+  MIT-CMU                   1 packages  ░░░░░░░░░░░░░░░░░░
+  3-Clause BSD License      1 packages  ░░░░░░░░░░░░░░░░░░
+  GNU Library or Lesser General Public License (LGPL)    1 packages  ░░░░░░░░░░░░░░░░░░
+  DFSG approved             1 packages  ░░░░░░░░░░░░░░░░░░
+  Apache-2.0 AND CNRI-Python    1 packages  ░░░░░░░░░░░░░░░░░░
+  Artistic License          1 packages  ░░░░░░░░░░░░░░░░░░
+  MPL-2.0 AND MIT           1 packages  ░░░░░░░░░░░░░░░░░░
+  MIT OR Apache-2.0         1 packages  ░░░░░░░░░░░░░░░░░░
+  PSF-2.0                   1 packages  ░░░░░░░░░░░░░░░░░░
+```
+
+</details>
+
+* **`export ===`**: Provides detailed output for export ===.
+
+<details>
+<summary><b>Example Output (fastapi: `export ===`)</b></summary>
+
+```text
+digraph dependencies {
+    rankdir=TB;
+    "pydantic" -> "annotated-types";
+    "pydantic" -> "email-validator";
+    "pydantic" -> "pydantic-core";
+    "pydantic" -> "typing-extensions";
+    "pydantic" -> "typing-inspection";
+    "starlette" -> "anyio";
+    "starlette" -> "typing-extensions";
+    "typing-inspection" -> "typing-extensions";
+    "email-validator" -> "dnspython";
+    "email-validator" -> "idna";
+    "pydantic-core" -> "typing-extensions";
+    "anyio" -> "exceptiongroup";
+    "anyio" -> "idna";
+    "anyio" -> "trio";
+    "anyio" -> "typing-extensions";
+    "exceptiongroup" -> "typing-extensions";
+    "trio" -> "attrs";
+    "trio" -> "cffi";
+    "trio" -> "exceptiongroup";
+    "trio" -> "idna";
+    "trio" -> "outcome";
+    "trio" -> "sniffio";
+    "trio" -> "sortedcontainers";
+    "cffi" -> "pycparser";
+    "outcome" -> "attrs";
+}
+```
+
+</details>
+
+
 ---
 
-## 🧠 How It Works & Architecture
+## 🧠 Modular Architecture
+
+PyXRay operates on a highly modular architecture while strictly adhering to standard library limits.
 
 ```text
 Your project
@@ -488,27 +532,24 @@ pyproject.toml / requirements.txt
      ↓
 uv.lock / poetry.lock (Offline Mode - Default)
  OR importlib.metadata (Active Env Mode - Fallback)
+ OR PyPI JSON API (--pypi flag for remote resolution)
      ↓
-BFS graph traversal
+BFS graph traversal via collections.deque
      ↓
-Graph algorithms (DFS, BFS, DFS colouring)
+AST source code analysis (ast module)
      ↓
-AST source scan
-     ↓
-Deterministic output
+Commands loaded lazily via pyxray/commands/*.py
 ```
-*No network. No ML. No guessing.*
 
-### Architecture
-* `models.py` — Package, DependencyGraph, Requirement, SourceImport, AnalysisResult
-* `requirements.py` — PEP 508 parser + environment marker evaluator
-* `metadata.py` — `importlib.metadata` discovery layer
-* `manifest.py` — `pyproject.toml` / `requirements.txt` reader
-* `graph.py` — BFS graph builder
-* `analysis.py` — Graph algorithms (BFS, DFS, cycles, depths, hotspots)
-* `source.py` — AST import extractor + import→distribution mapper
-* `output.py` — ANSI terminal output (no rich/colorama)
-* `cli.py` — `argparse` CLI + command dispatch
+### Key Modules:
+- **`commands/`**: Contains 20 separate commands (e.g., `license.py`, `security.py`, `summary.py`). These are lazy-loaded via `importlib` so PyXRay boots in milliseconds regardless of the number of commands.
+- **`osv.py`**: Interacts with the Open Source Vulnerability API using `urllib.request`.
+- **`pypi.py`**: Resolves uninstalled packages via the PyPI JSON API.
+- **`graph.py`**: Builds directed acyclic dependency graphs in a single O(N) pass.
+- **`source.py`**: Parses every source file via the `ast` module to extract precise imports.
+- **`lockfile.py`**: Parses `pyproject.toml` and `uv.lock` safely using `tomllib`.
+
+*No network (unless requested). No ML. No guessing.*
 
 ---
 
