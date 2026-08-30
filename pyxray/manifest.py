@@ -114,10 +114,13 @@ def _parse_pyproject(path: Path) -> tuple[str, list[Requirement], list[str]]:
 
     # Also try PEP 735 dependency-groups (optional, best-effort)
     dep_groups: dict = data.get("dependency-groups", {})
-    if dep_groups:
+    if dep_groups and not reqs:
+        # Only warn when [project].dependencies is empty — acts as a "did you mean?" hint.
+        # When [project].dependencies is populated, dependency-groups are dev/test extras
+        # that PyXRay intentionally skips (they are not runtime dependencies).
         warnings.append(
-            "pyproject.toml: [dependency-groups] detected but not read "
-            "(only [project].dependencies is supported)"
+            "pyproject.toml: [dependency-groups] found but [project].dependencies is empty. "
+            "PyXRay reads runtime deps from [project].dependencies only."
         )
 
     # tool.poetry fallback

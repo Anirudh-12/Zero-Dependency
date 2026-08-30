@@ -84,6 +84,52 @@ class TestE2E(unittest.TestCase):
     def test_e2e_prune(self):
         data = self.run_cli("prune")
         self.assertIn("candidates", data)
+    def test_e2e_env(self):
+        data = self.run_cli("env")
+        self.assertIn("python_version", data)
+
+    def test_e2e_check(self):
+        held_stdout = io.StringIO()
+        with patch('sys.stdout', held_stdout):
+            exit_code = main(["--json", "--quiet", "--root", ".", "check", "--allow-cycles", "--allow-missing"])
+            
+        self.assertEqual(exit_code, 0)
+        data = json.loads(held_stdout.getvalue())
+        self.assertIn("passed", data)
+
+
+    def test_e2e_license(self):
+        data = self.run_cli("license")
+        self.assertIn("licenses", data)
+
+    def test_e2e_export_mermaid(self):
+        held_stdout = io.StringIO()
+        with patch('sys.stdout', held_stdout):
+            exit_code = main(["--quiet", "--root", ".", "export", "--format", "mermaid"])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("graph TD", held_stdout.getvalue())
+        
+    def test_e2e_compare(self):
+        # We don't have two locks, but we can compare uv.lock to itself
+        if os.path.exists("uv.lock"):
+            data = self.run_cli("compare", "--old", "uv.lock", "--new", "uv.lock")
+            self.assertIn("added", data)
+
+    def test_e2e_unused_extras(self):
+        data = self.run_cli("unused-extras")
+        self.assertIn("extras", data)
+
+    @patch("pyxray.pypi.fetch_latest_version")
+    def test_e2e_outdated(self, mock_fetch):
+        mock_fetch.return_value = "99.0"
+        data = self.run_cli("outdated")
+        self.assertIn("outdated", data)
+
+    @patch("pyxray.osv.query_osv_batch")
+    def test_e2e_security(self, mock_query):
+        mock_query.return_value = {}
+        data = self.run_cli("security")
+        self.assertIn("findings", data)
 
 if __name__ == "__main__":
     unittest.main()

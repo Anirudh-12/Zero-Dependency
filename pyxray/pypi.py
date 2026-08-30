@@ -200,3 +200,21 @@ def build_graph_from_pypi(
         )
 
     return graph, warnings
+
+
+# ---------------------------------------------------------------------------
+# Latest-version helper (used by cmd_outdated)
+# ---------------------------------------------------------------------------
+
+
+def fetch_latest_version(name: str) -> Optional[str]:
+    """Return the latest version of *name* on PyPI, or None on error/not found.
+
+    Uses the existing in-process _CACHE to avoid duplicate requests.
+    """
+    url = f"{PYPI_BASE}/{name}/json"
+    data = _fetch_json(url)
+    if not data:
+        return None
+    return data.get("info", {}).get("version")
+
