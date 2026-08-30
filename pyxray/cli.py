@@ -156,6 +156,40 @@ class Context:
 # ---------------------------------------------------------------------------
 
 
+def _compute_health_grade(stats: dict) -> tuple[str, str]:
+    """Return (grade, reason) based on graph health signals."""
+    cycles = stats["cycle_count"]
+    missing = stats["missing_packages"]
+    depth = stats["maximum_depth"]
+
+    if cycles > 3 or missing > 5:
+        grade = "F"
+        reason = f"{cycles} cycle(s), {missing} missing package(s)"
+    elif cycles >= 1 or missing > 2:
+        grade = "D"
+        parts = []
+        if cycles:
+            parts.append(f"{cycles} cycle(s)")
+        if missing > 2:
+            parts.append(f"{missing} missing package(s)")
+        reason = ", ".join(parts)
+    elif missing > 0 or depth > 12:
+        grade = "C"
+        parts = []
+        if missing:
+            parts.append(f"{missing} missing package(s)")
+        if depth > 12:
+            parts.append(f"depth {depth} is very deep")
+        reason = ", ".join(parts)
+    elif depth > 8:
+        grade = "B"
+        reason = f"no cycles, 0 missing, depth {depth} is moderate"
+    else:
+        grade = "A"
+        reason = "no cycles, 0 missing, depth OK"
+    return grade, reason
+
+
 def cmd_summary(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
     from pyxray.analysis import compute_stats
@@ -210,6 +244,18 @@ def cmd_summary(ctx: Context, args: argparse.Namespace) -> int:
             f"{stats['most_depended_upon_count']} dependents"
         )
 
+    # Health grade (R5)
+    grade, reason = _compute_health_grade(stats)
+    grade_color = (
+        out.green if grade in ("A", "B")
+        else out.yellow if grade in ("C", "D")
+        else out.red
+    )
+    out.println(
+        f"\n  {'Health':<30} {grade_color(out.bold(grade))}  "
+        f"{out.dim(f'({reason})')}"
+    )
+
     if graph.missing and not ctx.quiet:
         out.println()
         out.println(
@@ -225,13 +271,14 @@ def cmd_summary(ctx: Context, args: argparse.Namespace) -> int:
 def cmd_tree(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
     from pyxray.output import render_tree
+    from pyxray.analysis import compute_in_degrees
 
     project = ctx.get_project()
     graph = ctx.get_graph()
-    installed = ctx.get_installed()
     ctx.emit_warnings()
 
     max_depth = args.depth
+    sort_by = getattr(args, "sort_by", "alpha")
 
     def display(norm_name: str) -> str:
         pkg = graph.packages.get(norm_name)
@@ -270,11 +317,22 @@ def cmd_tree(ctx: Context, args: argparse.Namespace) -> int:
         out.println(out.dim("  (no dependencies declared)"))
         return 0
 
+    # R6: build sort key — in-degree proxy for "heaviness"
+    if sort_by == "in-degree":
+        in_deg = compute_in_degrees(graph)
+        def children_fn(n: str) -> list[str]:
+            kids = list(graph.forward.get(n, set()))
+            # Sort by in-degree descending (most-depended-upon first), then alpha
+            return sorted(kids, key=lambda x: (-in_deg.get(x, 0), x))
+    else:
+        def children_fn(n: str) -> list[str]:
+            return sorted(graph.forward.get(n, set()))
+
     # Render each root as its own subtree
     for root in sorted(graph.roots):
         lines = render_tree(
             root,
-            children_fn=lambda n: sorted(graph.forward.get(n, set())),
+            children_fn=children_fn,
             display_fn=display,
             max_depth=max_depth,
         )
@@ -283,6 +341,30 @@ def cmd_tree(ctx: Context, args: argparse.Namespace) -> int:
         out.println()
 
     return 0
+
+
+def _get_edge_constraint(graph, from_norm: str, to_norm: str) -> str:
+    """Return the version specifier string that ties from_norm → to_norm.
+
+    Walks raw_requires of the from package and extracts the specifier portion
+    (e.g. '>=0.36.3') for the matching dependency entry. Returns '' if none found.
+    """
+    from pyxray.requirements import fast_extract_normalized_name
+    pkg = graph.packages.get(from_norm)
+    if not pkg:
+        return ""
+    for raw in pkg.raw_requires:
+        dep_norm = fast_extract_normalized_name(raw)
+        if dep_norm == to_norm:
+            # Extract specifier: everything after the first name token
+            # raw is like 'starlette>=0.36.3' or 'anyio>=4.0.0,<5'
+            # Strip the package name (up to first =/</>/ ;)
+            import re
+            m = re.match(r"[A-Za-z0-9_\-.]+\s*([^;]*)", raw)
+            if m:
+                spec = m.group(1).strip().split(";")[0].strip()
+                return spec
+    return ""
 
 
 def cmd_why(ctx: Context, args: argparse.Namespace) -> int:
@@ -336,18 +418,25 @@ def cmd_why(ctx: Context, args: argparse.Namespace) -> int:
 
     for i, path in enumerate(paths, 1):
         out.println(out.bold(f"\n  Path {i}"))
-        pkg_display = lambda n: (
-            (graph.packages[n].name if n in graph.packages else n)
-            + " "
-            + out.dim(
-                f"({graph.packages[n].version})"
-                if n in graph.packages and graph.packages[n].version != "?"
-                else ""
+
+        def pkg_display(n: str) -> str:
+            return (
+                (graph.packages[n].name if n in graph.packages else n)
+                + " "
+                + out.dim(
+                    f"({graph.packages[n].version})"
+                    if n in graph.packages and graph.packages[n].version != "?"
+                    else ""
+                )
             )
-        )
+
+        # R7: edge_label_fn shows version constraint between hops
+        def edge_label_fn(from_n: str, to_n: str) -> str:
+            return _get_edge_constraint(graph, from_n, to_n)
+
         from pyxray.output import render_path
 
-        for line in render_path(path, display_fn=pkg_display):
+        for line in render_path(path, display_fn=pkg_display, edge_label_fn=edge_label_fn):
             out.println("    " + line)
 
     out.println()
@@ -356,11 +445,13 @@ def cmd_why(ctx: Context, args: argparse.Namespace) -> int:
 
 def cmd_impact(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
-    from pyxray.analysis import reachable_reverse
+    from pyxray.analysis import reachable_reverse, compute_depths
     from pyxray.models import normalize_name
 
     package = args.package
     norm = normalize_name(package)
+    expand_all = getattr(args, "all", False)
+    limit = getattr(args, "limit", None)
 
     graph = ctx.get_graph()
     ctx.emit_warnings()
@@ -396,11 +487,60 @@ def cmd_impact(ctx: Context, args: argparse.Namespace) -> int:
         out.println(out.dim("  (nothing depends on this package)"))
         return 0
 
-    for dep in sorted(affected):
+    # R1: group by hop distance from the target package using reverse-graph depths
+    # depth[dep] - depth[norm] gives approximate hop distance.
+    depths = compute_depths(graph)
+    norm_depth = depths.get(norm, 0)
+
+    def _hop(dep: str) -> int:
+        d = depths.get(dep, norm_depth)
+        diff = d - norm_depth
+        return max(diff, 1)  # at least 1 hop
+
+    # Sort affected: hop ascending, then alpha
+    sorted_affected = sorted(affected, key=lambda d: (_hop(d), d))
+
+    # Apply --limit (R8)
+    display_affected = sorted_affected
+    truncated = 0
+    if limit and limit > 0 and len(sorted_affected) > limit:
+        display_affected = sorted_affected[:limit]
+        truncated = len(sorted_affected) - limit
+
+    # Render grouped by hop band
+    current_band: Optional[int] = None
+    band_labels = {1: "Direct dependents", 2: "2 hops", 3: "3+ hops (deep transitive)"}
+    deep_threshold = 3
+
+    rendered_in_deep = 0
+    total_deep = sum(1 for d in sorted_affected if _hop(d) >= deep_threshold)
+
+    for dep in display_affected:
+        hop = _hop(dep)
+        band = min(hop, deep_threshold)
+        if band != current_band:
+            current_band = band
+            label = band_labels.get(band, f"{band}+ hops")
+            count = sum(1 for d in sorted_affected if min(_hop(d), deep_threshold) == band)
+            out.println(
+                f"  {out.bold(label):<38} {out.dim(f'── {count} package(s)')}"
+            )
+        if band >= deep_threshold and not expand_all:
+            rendered_in_deep += 1
+            if rendered_in_deep == 1:
+                # Show count summary instead of listing
+                out.println(
+                    f"    {out.dim(f'{total_deep} package(s)  (use --all to expand)')}"
+                )
+            continue  # skip individual lines unless --all
+
         pkg_d = graph.packages.get(dep)
         ver = out.dim(f" {pkg_d.version}") if pkg_d else ""
         marker = out.green("  ⊕ root ") if dep in graph.roots else "       "
         out.println(f"  {marker} {out.cyan(dep)}{ver}")
+
+    if truncated:
+        out.println(out.dim(f"  … and {truncated} more (remove --limit to see all)"))
 
     out.println()
     return 0
@@ -525,17 +665,24 @@ def cmd_stats(ctx: Context, args: argparse.Namespace) -> int:
 
 def cmd_hotspots(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
-    from pyxray.analysis import compute_in_degrees
+    from pyxray.analysis import compute_in_degrees, reachable_from
 
     graph = ctx.get_graph()
     ctx.emit_warnings()
 
     in_deg = compute_in_degrees(graph)
     top_n = args.top
+    limit = getattr(args, "limit", None)
 
     ranked = sorted(in_deg.items(), key=lambda x: -x[1])
     if top_n:
         ranked = ranked[:top_n]
+
+    # Apply --limit (R8)
+    truncated = 0
+    if limit and limit > 0 and len(ranked) > limit:
+        truncated = len(ranked) - limit
+        ranked = ranked[:limit]
 
     if ctx.json_output:
         out.print_json(
@@ -544,7 +691,10 @@ def cmd_hotspots(ctx: Context, args: argparse.Namespace) -> int:
         return 0
 
     out.section(f"Dependency Hotspots (top {top_n or len(ranked)})")
-    out.println(out.dim("  Packages with the most reverse dependencies (in-degree)."))
+    out.println(
+        out.dim("  Packages with the most reverse dependencies (in-degree).")
+        + out.dim("  Risk = dependents × (1 + subtree_size)")
+    )
     out.println()
 
     if not ranked:
@@ -561,9 +711,20 @@ def cmd_hotspots(ctx: Context, args: argparse.Namespace) -> int:
         ver = out.dim(f" {pkg.version}") if pkg else ""
         bar_len = int(bar_width * count / max(max_count, 1))
         bar = out.cyan("█" * bar_len) + out.dim("░" * (bar_width - bar_len))
+
+        # R4: subtree size (number of packages this one transitively pulls in, excluding self)
+        subtree_size = len(reachable_from(graph, norm_name)) - 1
+        risk = count * (1 + subtree_size)
+
         out.println(f"  {out.cyan(norm_name)}{ver}")
-        out.println(f"  {bar}  {out.bold(str(count))} dependents")
+        out.println(
+            f"  {bar}  {out.bold(str(count))} dependents  "
+            f"{out.dim(f'subtree: {subtree_size}  risk: {risk}')}"
+        )
         out.println()
+
+    if truncated:
+        out.println(out.dim(f"  … and {truncated} more"))
 
     return 0
 
@@ -671,6 +832,20 @@ def cmd_imports(ctx: Context, args: argparse.Namespace) -> int:
     return 0
 
 
+# R2: helper to classify a file path as test vs production
+_TEST_SEGMENTS = frozenset({"tests", "test", "testing", "spec", "specs"})
+
+
+def _is_test_file(path: str) -> bool:
+    """Return True if *path* looks like a test file."""
+    from pathlib import PurePosixPath
+    p = PurePosixPath(path.replace("\\", "/"))
+    name = p.stem.lower()
+    if name.startswith("test_") or name.endswith("_test"):
+        return True
+    return any(part.lower() in _TEST_SEGMENTS for part in p.parts)
+
+
 def cmd_audit(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
     from pyxray.source import scan_with_usage, build_import_map, classify_imports
@@ -680,6 +855,8 @@ def cmd_audit(ctx: Context, args: argparse.Namespace) -> int:
     graph = ctx.get_graph()
     installed = ctx.get_installed()
     ctx.emit_warnings()
+
+    limit = getattr(args, "limit", None)
 
     import_map = build_import_map({**installed, **graph.packages})
     all_imports, usage_map, warnings = scan_with_usage(
@@ -758,10 +935,24 @@ def cmd_audit(ctx: Context, args: argparse.Namespace) -> int:
             if mapped and mapped in potentially_undeclared:
                 locs.setdefault(mapped, []).append(f"{imp.file}:{imp.line}")
 
-        for norm in sorted(potentially_undeclared):
-            out.println(f"    {out.red('•')} {norm}")
-            for loc in locs.get(norm, [])[:5]:  # cap at 5 locations
+        # R2: tag each undeclared import as [production] or [test only]
+        undeclared_sorted = sorted(potentially_undeclared)
+        # Apply --limit (R8)
+        truncated = 0
+        if limit and limit > 0 and len(undeclared_sorted) > limit:
+            truncated = len(undeclared_sorted) - limit
+            undeclared_sorted = undeclared_sorted[:limit]
+
+        for norm in undeclared_sorted:
+            pkg_locs = locs.get(norm, [])
+            all_test = all(_is_test_file(loc.split(":")[0]) for loc in pkg_locs) if pkg_locs else False
+            tag = out.dim(" [test only]") if all_test else out.yellow(" [production]")
+            out.println(f"    {out.red('•')} {norm}{tag}")
+            for loc in pkg_locs[:5]:  # cap at 5 locations per package
                 out.println(f"        {out.dim(loc)}")
+
+        if truncated:
+            out.println(out.dim(f"  … and {truncated} more (remove --limit to see all)"))
 
     if not potentially_unused and not potentially_undeclared:
         out.println()
@@ -782,6 +973,7 @@ def cmd_prune(ctx: Context, args: argparse.Namespace) -> int:
     from pyxray import output as out
     from pyxray.analysis import compute_prune_candidates
     from pyxray.source import build_import_map, scan_with_usage
+    from pyxray.hints import get_hint  # R3
 
     project = ctx.get_project()
     graph = ctx.get_graph()
@@ -812,8 +1004,6 @@ def cmd_prune(ctx: Context, args: argparse.Namespace) -> int:
     ]
 
     if ctx.json_output:
-        import json
-
         out.print_json(
             {
                 "candidates": [
@@ -869,6 +1059,12 @@ def cmd_prune(ctx: Context, args: argparse.Namespace) -> int:
 
         for line in textwrap.wrap(c.reason, width=70):
             out.println(f"      {line}")
+
+        # R3: stdlib replacement hint for REIMPLEMENT candidates
+        if c.label == "REIMPLEMENT":
+            hint = get_hint(c.norm_name)
+            out.println(f"      {out.green('Suggestion:')} {hint}")
+
         out.println()
 
     return 0
@@ -929,6 +1125,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version="PyXRay 0.1.0",
     )
+    # R8: global --limit flag for list-style commands
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limit list output to N items (0 = no limit). Applies to impact, hotspots, audit.",
+    )
 
     # ── Graph source flags ────────────────────────────────────────────────
     source_group = parser.add_argument_group(
@@ -986,6 +1190,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Maximum tree depth to render",
     )
+    p_tree.add_argument(
+        "--sort-by",
+        dest="sort_by",
+        choices=["alpha", "in-degree"],
+        default="alpha",
+        help="Sort children alphabetically (default) or by in-degree descending (most-depended-upon first)",
+    )
     p_tree.set_defaults(func=cmd_tree)
 
     # why
@@ -1004,6 +1215,12 @@ def build_parser() -> argparse.ArgumentParser:
         "impact", help="Show packages affected if a package disappeared"
     )
     p_impact.add_argument("package", help="Package name to analyse")
+    p_impact.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Expand deep transitive dependents (3+ hops) in full",
+    )
     p_impact.set_defaults(func=cmd_impact)
 
     # duplicates

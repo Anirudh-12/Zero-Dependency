@@ -301,8 +301,17 @@ def print_json(data: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_path(path: list[str], display_fn=None) -> list[str]:
-    """Render a dependency path as an indented chain."""
+def render_path(path: list[str], display_fn=None, edge_label_fn=None) -> list[str]:
+    """Render a dependency path as an indented chain.
+
+    Parameters
+    ----------
+    path:           Ordered list of node names (start → end).
+    display_fn:     Optional callable(node) → str for display text.
+    edge_label_fn:  Optional callable(from_node, to_node) → str.
+                    When provided, inserts a dim 'requires <label>' line
+                    between each hop to show the version constraint.
+    """
     if not path:
         return []
     lines: list[str] = []
@@ -312,5 +321,10 @@ def render_path(path: list[str], display_fn=None) -> list[str]:
             lines.append(bold(display))
         else:
             indent = "  " * i
+            # R7: optionally show the version constraint before the arrow
+            if edge_label_fn:
+                label = edge_label_fn(path[i - 1], node)
+                if label:
+                    lines.append(indent + dim(f"  requires {label}"))
             lines.append(indent + _LAST + display)
     return lines
