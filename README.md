@@ -582,22 +582,12 @@ print('dependencies:', deps)
 
 ### Reproducible Build Proof
 
-We've achieved byte-identical builds! By enforcing a fixed `SOURCE_DATE_EPOCH`, `uv build` deterministically generates the exact same artifact on every run.
+We've achieved byte-identical wheel builds! By enforcing a fixed `SOURCE_DATE_EPOCH`, `uv build` deterministically generates the exact same `.whl` artifact on every run.
+
+You can verify this yourself using the provided verification script:
 
 ```bash
-# Build 1
-$env:SOURCE_DATE_EPOCH = "1704067200"
-uv build
-$hash1 = (Get-FileHash -Algorithm SHA256 dist/zero_dependency-0.1.0-py3-none-any.whl).Hash
-
-# Delete and build again
-rm dist/zero_dependency-0.1.0-py3-none-any.whl
-uv build
-$hash2 = (Get-FileHash -Algorithm SHA256 dist/zero_dependency-0.1.0-py3-none-any.whl).Hash
+python scripts/verify_build.py
 ```
 
-**Byte-Identical Hashes:**
-- Build 1 SHA256: `5E162E120F752B4C93A95928C491D5804440306DC5BBC94C1ABCF5494AA3C023`
-- Build 2 SHA256: `5E162E120F752B4C93A95928C491D5804440306DC5BBC94C1ABCF5494AA3C023`
-
-**Result:** `Match!`
+The script will automatically build the project twice under a fixed timestamp, clear the build artifacts in between, and compare the SHA256 hashes of the resulting `.whl` files to prove they are byte-identical.
